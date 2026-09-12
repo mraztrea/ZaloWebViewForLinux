@@ -1,0 +1,37 @@
+{
+  "name": "zaloview",
+  "version": "0.1.0",
+  "description": "Linux Webview Manager for isolated website profiles with XPath monitoring and desktop integration",
+  "main": "dist/main/index.js",
+  "bin": {
+    "zaloview": "./bin/zaloview.js"
+  },
+  "engines": {
+    "node": ">=22.0.0"
+  },
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "prestart": "npm run build",
+    "start": "electron ."
+  },
+  "keywords": [
+    "electron",
+    "linux",
+    "webview",
+    "zalo",
+    "wayland",
+    "xpath",
+    "notification"
+  ],
+  "author": "buiducthanh",
+  "license": "MIT",
+  "devDependencies": {
+    "@types/node": "^22.13.9",
+    "electron": "^44.3.0",
+    "esbuild": "^0.25.0",
+    "typescript": "^5.8.2",
+    "vitest": "^3.0.7"
+  }
+}
