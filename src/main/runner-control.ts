@@ -7,13 +7,17 @@ import {
   SOCKET_TIMEOUT_MS,
   RunnerControlRequest,
   RunnerControlResponse,
-  RunnerStatusData
+  RunnerStatusData,
+  XPathTestRequestParams,
+  XPathEvaluationResult,
+  XPathObservationMode
 } from '../shared/types';
 import { resolveSocketPath } from './xdg-paths';
 
 export interface RunnerControlServerOptions {
   onStatus: () => RunnerStatusData | Promise<RunnerStatusData>;
   onShutdown: () => void | Promise<void>;
+  onTestXPath?: (params: XPathTestRequestParams) => Promise<XPathEvaluationResult>;
 }
 
 export class RunnerControlServer {
@@ -21,6 +25,7 @@ export class RunnerControlServer {
   private socketPath: string;
   private profileId: string;
   private options: RunnerControlServerOptions;
+  private isTestXPathPending = false;
 
   constructor(profileId: string, options: RunnerControlServerOptions) {
     this.profileId = profileId;
@@ -126,6 +131,100 @@ export class RunnerControlServer {
                 this.options.onShutdown();
               }, 50);
             });
+          } else if (request.action === 'test-xpath') {
+            const params = request.params as XPathTestRequestParams | undefined;
+            if (!params || typeof params.selector !== 'string' || !params.selector.trim()) {
+              const response: RunnerControlResponse = {
+                requestId,
+                success: false,
+                error: 'INVALID_REQUEST: Tham số "selector" là bắt buộc và không được để trống.'
+              };
+              socket.write(JSON.stringify(response) + '\n');
+              return;
+            }
+
+            const validModes: XPathObservationMode[] = ['existence', 'badge_count', 'text_content'];
+            if (!params.mode || !validModes.includes(params.mode)) {
+              const response: RunnerControlResponse = {
+                requestId,
+                success: false,
+                error: 'INVALID_REQUEST: Tham số "mode" phải là một trong: existence, badge_count, text_content.'
+              };
+              socket.write(JSON.stringify(response) + '\n');
+              return;
+            }
+
+            if (!this.options.onTestXPath) {
+              const response: RunnerControlResponse = {
+                requestId,
+                success: false,
+                error: 'NOT_SUPPORTED: Runner chưa cấu hình bộ thử nghiệm XPath.'
+              };
+              socket.write(JSON.stringify(response) + '\n');
+              return;
+            }
+
+            if (this.isTestXPathPending) {
+              const response: RunnerControlResponse = {
+                requestId,
+                success: false,
+                error: 'CONCURRENT_TEST_NOT_ALLOWED: Đang có một yêu cầu thử nghiệm XPath khác đang được xử lý.'
+              };
+              socket.write(JSON.stringify(response) + '\n');
+              return;
+            }
+
+            this.isTestXPathPending = true;
+            const timeoutMs = 5000;
+            let finished = false;
+
+            const timer = setTimeout(() => {
+              if (!finished) {
+                finished = true;
+                this.isTestXPathPending = false;
+                const response: RunnerControlResponse = {
+                  requestId,
+                  success: false,
+                  error: 'TIMEOUT: Quá thời gian chờ phản hồi kết quả XPath từ trang web (5000 ms).'
+                };
+                socket.write(JSON.stringify(response) + '\n');
+              }
+            }, timeoutMs);
+
+            try {
+              const result = await this.options.onTestXPath({
+                selector: params.selector.trim(),
+                mode: params.mode
+              });
+
+              if (!finished) {
+                finished = true;
+                clearTimeout(timer);
+                this.isTestXPathPending = false;
+
+                const isSuccess = result.status === 'match' || result.status === 'no_match';
+                const response: RunnerControlResponse = {
+                  requestId,
+                  success: isSuccess,
+                  data: result,
+                  error: isSuccess ? undefined : (result.error || `Lỗi thử nghiệm XPath (${result.status}).`)
+                };
+                socket.write(JSON.stringify(response) + '\n');
+              }
+            } catch (err: unknown) {
+              if (!finished) {
+                finished = true;
+                clearTimeout(timer);
+                this.isTestXPathPending = false;
+
+                const response: RunnerControlResponse = {
+                  requestId,
+                  success: false,
+                  error: (err as Error).message || 'Lỗi không xác định khi thử nghiệm XPath.'
+                };
+                socket.write(JSON.stringify(response) + '\n');
+              }
+            }
           } else {
             const response: RunnerControlResponse = {
               requestId,
