@@ -1,8 +1,10 @@
 # Lộ trình triển khai 5 phase
 
-Ngày cập nhật: 12/09/2026. Trạng thái: kế hoạch, chưa có phase nào được triển khai hoặc nghiệm thu.
+Ngày cập nhật: 12/09/2026. Trạng thái: lộ trình mục tiêu; repo đã có triển khai một phần, chưa có bằng chứng nghiệm thu đầy đủ toàn bộ phase. Đợt tài liệu hiện tại chỉ chi tiết hóa phase 4–5; không rà soát lại tài liệu riêng phase 1–3.
 
 Thiết kế chuẩn: [Đặc tả kỹ thuật](design_specification.md). Đầu việc và kiểm tra chi tiết: [Kế hoạch 8 task](detailed_tasks_plan.md).
+
+Bộ chi tiết mới: [Spec/plan phase 4–5](phases/README.md). Các điểm code ảnh hưởng triển khai được ghi trong [hướng dẫn sửa](code_remediation_guide.md); lần cập nhật này không sửa code.
 
 ## Tổng quan
 
@@ -76,6 +78,8 @@ Chỉ chuyển phase khi tiêu chí của phase trước đã đạt trên môi 
 
 ## Phase 4 — Menu shortcut và cài launcher
 
+Tài liệu chi tiết: [Đặc tả](phases/phase-4-shortcuts/spec.md) · [Kế hoạch](phases/phase-4-shortcuts/plan.md).
+
 **Mục tiêu:** shortcut mở đúng runner từ desktop session và được liên kết đúng icon khi môi trường hỗ trợ.
 
 - [ ] Task 6: sinh/cập nhật/xóa desktop entry dưới XDG_DATA_HOME/applications.
@@ -93,6 +97,8 @@ Chỉ chuyển phase khi tiêu chí của phase trước đã đạt trên môi 
 5. Tắt shortcut/xóa profile gỡ đúng file thuộc app; không xóa dữ liệu người dùng ngoài mục tiêu.
 
 ## Phase 5 — Dashboard và nghiệm thu đầu cuối
+
+Tài liệu chi tiết: [Đặc tả](phases/phase-5-manager/spec.md) · [Kế hoạch](phases/phase-5-manager/plan.md).
 
 **Mục tiêu:** người dùng quản lý profile qua GUI, không cần sửa JSON thủ công.
 

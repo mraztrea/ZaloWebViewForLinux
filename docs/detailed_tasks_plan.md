@@ -1,6 +1,6 @@
 # Kế hoạch chi tiết: 8 task triển khai Linux Webview Manager
 
-Ngày cập nhật: 12/09/2026. Trạng thái: chưa triển khai. Tài liệu này quy định công việc và kiểm tra cần thực hiện, không chứa kết quả build/test đã chạy.
+Ngày cập nhật: 12/09/2026. Trạng thái: kế hoạch mục tiêu, mã nguồn đã triển khai một phần. Tài liệu này quy định công việc và kiểm tra cần thực hiện; không dùng checkbox để khẳng định đã nghiệm thu. Đợt cập nhật hiện tại chỉ chi tiết hóa Task 6–8 tương ứng phase 4–5.
 
 Nguồn chuẩn: [Đặc tả thiết kế](design_specification.md). Thứ tự nghiệm thu: [Lộ trình 5 phase](phased_implementation_plan.md).
 
@@ -16,7 +16,7 @@ Các mã triển khai dài trong bản cũ có lỗi build, vòng đời, bảo 
 | 4 — Shortcut | 6 | 3, 5 |
 | 5 — Manager và nghiệm thu | 7, 8 | 7 sau 6; 8 sau 7 |
 
-Các file dưới đây là file dự kiến tạo, chưa tồn tại trong repo. Tên module có thể gộp khi hợp lý nhưng phải giữ đủ hành vi. Không cần tạo class chỉ để bọc một hàm, mock setup trống hoặc scaffold chưa dùng.
+Các đường dẫn dưới đây mô tả cấu trúc mục tiêu; nhiều module nền tảng đã có trong repo. Khi thực hiện phải tái sử dụng code và test hiện có, chỉ tạo phần còn thiếu. Chi tiết hiện trạng và đầu việc mới cho Task 6–8 nằm trong [bộ spec/plan phase 4–5](phases/README.md). Không cần tạo class chỉ để bọc một hàm, mock setup trống hoặc scaffold chưa dùng.
 
 Với logic lưu trữ, trạng thái, CLI, IPC và serialization, viết kiểm tra hành vi trước khi triển khai, chạy lại sau thay đổi. Test phải bắt được lỗi đã nêu, không chỉ so sánh chuỗi/implementation với chính nó. Không đánh dấu đạt chỉ vì TypeScript biên dịch.
 
@@ -138,6 +138,8 @@ Với logic lưu trữ, trạng thái, CLI, IPC và serialization, viết kiểm
 
 ## Task 6 — Desktop entry và đường khởi chạy đã cài
 
+Chi tiết thực hiện: [spec phase 4](phases/phase-4-shortcuts/spec.md) và [plan phase 4](phases/phase-4-shortcuts/plan.md).
+
 **File dự kiến:** `src/main/desktop-service.ts`, `tests/desktop-service.test.ts`; hoàn thiện launcher/cài đặt từ Task 1.
 
 **Hợp đồng:** tạo/cập nhật/xóa shortcut theo ID với XDG_DATA_HOME; Exec trỏ launcher đã xác minh.
@@ -158,6 +160,8 @@ Với logic lưu trữ, trạng thái, CLI, IPC và serialization, viết kiểm
 - [ ] KDE/GNOME: tìm trong menu, pin/unpin, icon riêng, mở lặp chỉ focus runner cũ. Thử riêng X11/Wayland theo ma trận.
 
 ## Task 7 — Manager dashboard và nối đầy đủ API
+
+Chi tiết hợp đồng và thực hiện: [spec phase 5](phases/phase-5-manager/spec.md) và [plan phase 5](phases/phase-5-manager/plan.md).
 
 **File dự kiến:** `src/preload/manager-preload.ts`, `src/renderer/manager/index.html`, `styles.css`, `app.ts`, `src/main/icon-fetcher.ts`, `tests/manager.test.ts`; mở rộng main handlers.
 
@@ -195,6 +199,8 @@ Với logic lưu trữ, trạng thái, CLI, IPC và serialization, viết kiểm
 - [ ] CRUD → launch → XPath test → alert → focus → shortcut → delete chạy xuyên suốt với session thực.
 
 ## Task 8 — Kiểm tra tích hợp và bàn giao
+
+Theo [P5-T5 trong plan phase 5](phases/phase-5-manager/plan.md); phân biệt kết quả tự động hiện tại với bằng chứng desktop trong [hướng dẫn xử lý code](code_remediation_guide.md).
 
 **File dự kiến:** `tests/integration.test.ts`, hướng dẫn chạy/cài ở README gốc khi đã có app, `docs/verification.md` khi thực sự nghiệm thu.
 

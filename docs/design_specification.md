@@ -1,6 +1,6 @@
 # Đặc tả thiết kế: Linux Webview Manager
 
-Ngày cập nhật: 12/09/2026. Trạng thái: đặc tả đã rà soát, chưa triển khai hoặc nghiệm thu runtime.
+Ngày cập nhật: 12/09/2026. Trạng thái: đặc tả mục tiêu đã rà soát; repo đã có triển khai một phần, chưa nghiệm thu runtime đầy đủ. Chi tiết phần tiếp theo tại [spec/plan phase 4–5](phases/README.md); việc có yêu cầu trong tài liệu không đồng nghĩa code đã đáp ứng.
 
 Yêu cầu gốc: [org_prompt.md](org_prompt.md). Triển khai theo [5 phase](phased_implementation_plan.md) và [8 task](detailed_tasks_plan.md).
 

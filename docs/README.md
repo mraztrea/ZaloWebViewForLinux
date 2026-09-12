@@ -1,6 +1,6 @@
 # Linux Webview Manager — Tài liệu dự án
 
-Ngày rà soát: 12/09/2026. Repo hiện chỉ có tài liệu; chưa có ứng dụng, cấu hình build hay bộ test để chạy. Các checkbox trong kế hoạch là công việc chưa triển khai, không phải kết quả kiểm thử.
+Ngày rà soát: 12/09/2026. Repo đã có mã nguồn, cấu hình build và bộ test; Manager hiện mới là khung giao diện và chưa có service sinh shortcut. Đợt cập nhật này chỉ bổ sung tài liệu phase 4–5, không tạo/cập nhật tài liệu riêng phase 1–3. Các checkbox trong kế hoạch là việc cần hoàn thiện hoặc kiểm chứng, không phải kết quả nghiệm thu runtime.
 
 ## Tài liệu chuẩn
 
@@ -10,10 +10,14 @@ Ngày rà soát: 12/09/2026. Repo hiện chỉ có tài liệu; chưa có ứng 
 | [Đặc tả thiết kế](design_specification.md) | Phạm vi, kiến trúc, dữ liệu, bảo mật và hành vi chuẩn. |
 | [Lộ trình 5 phase](phased_implementation_plan.md) | Thứ tự triển khai và điều kiện nghiệm thu từng giai đoạn. |
 | [Kế hoạch chi tiết 8 task](detailed_tasks_plan.md) | Đầu việc, phụ thuộc, hợp đồng và kiểm tra cho từng module. |
+| [Spec và plan phase 4–5](phases/README.md) | Đặc tả, API, đầu việc, file liên quan và tiêu chí nghiệm thu shortcut/Manager. |
+| [Hướng dẫn xử lý code](code_remediation_guide.md) | Bằng chứng các điểm cần xử lý khi triển khai phase 4–5 và ca hồi quy; chưa sửa code. |
 
 Đọc theo thứ tự trên. Khi có mâu thuẫn, đối chiếu yêu cầu gốc rồi sửa đặc tả và các kế hoạch liên quan cùng lúc. Những đường dẫn cũ trong `superpowers/` chuyển tới tài liệu chuẩn, không duy trì thêm bản sao.
 
-## Những vấn đề đã sửa trong lần rà soát này
+## Những vấn đề đã chỉnh trong thiết kế ở lần rà soát trước
+
+Các mục dưới đây mô tả việc sửa tài liệu thiết kế, không khẳng định mã nguồn đã đáp ứng đầy đủ. Hiện trạng và các điểm còn thiếu được ghi riêng trong hướng dẫn xử lý code ở trên.
 
 - Khóa instance: dữ liệu bổ sung của `requestSingleInstanceLock` không tạo khóa theo profile; quy định `userData` riêng trước khi lấy khóa và khởi chạy runner riêng từ Manager.
 - Định danh Linux: bỏ thuộc tính `wmClass` không thuộc hợp đồng `BrowserWindow`; phân biệt X11 `WM_CLASS`, Wayland app ID và tên file `.desktop`, thêm bước kiểm chứng trên runtime đã chọn.
