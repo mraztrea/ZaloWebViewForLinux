@@ -1,6 +1,6 @@
 import * as fs from 'node:fs';
 import { Profile, ProfileRegistry, WindowState } from '../shared/types';
-import { resolveRegistryPath, resolveWindowStatePath } from './xdg-paths';
+import { resolveProfileDataDir, resolveRegistryPath, resolveWindowStatePath } from './xdg-paths';
 import { atomicWriteFile } from './atomic-writer';
 import {
   validateProfile,
@@ -30,6 +30,13 @@ export class ProfileDuplicateIdError extends Error {
   constructor(id: string) {
     super(`Profile ID đã tồn tại: "${id}".`);
     this.name = 'ProfileDuplicateIdError';
+  }
+}
+
+export class ProfileDataExistsError extends Error {
+  constructor(id: string) {
+    super(`Dữ liệu phiên của profile "${id}" vẫn còn trên đĩa; hãy xóa phiên riêng trước khi dùng lại ID.`);
+    this.name = 'ProfileDataExistsError';
   }
 }
 
@@ -138,11 +145,14 @@ export class ProfileManager {
       if (registry.profiles.some((p) => p.id === id)) {
         throw new ProfileDuplicateIdError(id);
       }
+      if (fs.existsSync(resolveProfileDataDir(id))) {
+        throw new ProfileDataExistsError(id);
+      }
     } else {
       const baseSlug = generateSlug(params.name);
       id = baseSlug;
       let counter = 1;
-      while (registry.profiles.some((p) => p.id === id)) {
+      while (registry.profiles.some((p) => p.id === id) || fs.existsSync(resolveProfileDataDir(id))) {
         id = `${baseSlug}-${counter++}`;
       }
     }

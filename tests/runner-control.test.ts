@@ -28,7 +28,9 @@ describe('RunnerControlServer & Unix Socket Protocol', () => {
       url: 'https://chat.zalo.me',
       pid: process.pid,
       uptimeSeconds: 120,
-      windowState: createSampleWindowState()
+      windowState: createSampleWindowState(),
+      configRevision: '2026-09-12T10:00:00.000Z',
+      error: undefined
     };
 
     const server = new RunnerControlServer('acc1', {

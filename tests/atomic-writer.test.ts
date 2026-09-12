@@ -61,4 +61,15 @@ describe('Atomic Writer & XDG Paths', () => {
     const files = fs.readdirSync(env.configHome);
     expect(files).toEqual(['test.txt']);
   });
+
+  it('supports desktop entry permissions without changing the private default', () => {
+    const privateTarget = path.join(env.configHome, 'private.json');
+    const desktopTarget = path.join(env.configHome, 'zaloview-test.desktop');
+
+    atomicWriteFile(privateTarget, '{}');
+    atomicWriteFile(desktopTarget, '[Desktop Entry]\n', 0o644);
+
+    expect(fs.statSync(privateTarget).mode & 0o777).toBe(0o600);
+    expect(fs.statSync(desktopTarget).mode & 0o777).toBe(0o644);
+  });
 });

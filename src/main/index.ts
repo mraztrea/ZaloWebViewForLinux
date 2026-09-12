@@ -20,6 +20,17 @@ import {
   XPathTestRequestParams,
   XPathEvaluationResult
 } from '../shared/types';
+import {
+  isValidXPathErrorPayload,
+  isValidXPathTestResultPayload
+} from './xpath-ipc';
+
+interface PendingXPathTest {
+  selector: string;
+  mode: XPathTestRequestParams['mode'];
+  resolve: (result: XPathEvaluationResult) => void;
+  reject: (error: Error) => void;
+}
 
 function extractUserArgs(): string[] {
   if (app.isPackaged) {
@@ -50,12 +61,29 @@ let runnerQuitFinalizing = false;
 let lastLoggedError = '';
 const pendingXPathTests = new Map<
   string,
-  {
-    resolve: (res: XPathEvaluationResult) => void;
-    reject: (err: Error) => void;
-  }
+  PendingXPathTest
 >();
 const startupTime = Date.now();
+let runnerStatus: RunnerStatusData['status'] = 'starting';
+let runnerLoadError: string | undefined;
+
+function isTrustedRunnerFrame(event: Electron.IpcMainEvent): boolean {
+  if (!mainWindow || mainWindow.isDestroyed() || !currentProfile) return false;
+  const frame = event.senderFrame;
+  if (!frame || frame !== mainWindow.webContents.mainFrame) return false;
+
+  try {
+    return new URL(frame.url).origin === new URL(currentProfile.url).origin;
+  } catch {
+    return false;
+  }
+}
+
+function rejectPendingXPathTests(error: Error): void {
+  for (const pending of Array.from(pendingXPathTests.values())) {
+    pending.reject(error);
+  }
+}
 
 // 1. Parse CLI arguments before ready
 let cliArgs;
@@ -313,10 +341,29 @@ app.whenReady().then(async () => {
         profileManager.saveWindowState(profileId, newState);
       }
     });
+    mainWindow.on('closed', () => {
+      rejectPendingXPathTests(new Error('RUNNER_CLOSED: Cửa sổ runner đã đóng.'));
+    });
+    mainWindow.webContents.on('did-start-navigation', (_event, _url, _isInPlace, isMainFrame) => {
+      if (isMainFrame) {
+        runnerStatus = 'starting';
+        runnerLoadError = undefined;
+      }
+    });
+    mainWindow.webContents.on(
+      'did-fail-load',
+      (_event, errorCode, errorDescription, _validatedURL, isMainFrame) => {
+        if (!isMainFrame) return;
+        runnerStatus = 'error';
+        runnerLoadError = `${errorCode}: ${errorDescription}`;
+      }
+    );
 
     initializeRunnerDesktopIntegration(currentProfile);
 
     mainWindow.webContents.on('did-finish-load', () => {
+      runnerStatus = 'running';
+      runnerLoadError = undefined;
       if (currentProfile?.xpathConfig) {
         mainWindow?.webContents.send('xpath:init', { config: currentProfile.xpathConfig });
       }
@@ -325,18 +372,8 @@ app.whenReady().then(async () => {
     // Setup IPC listeners for XPath observation and testing
     ipcMain.on('xpath:state', (event, state: XPathObservationState) => {
       if (!mainWindow || !currentProfile) return;
-      if (event.senderFrame !== mainWindow.webContents.mainFrame) {
+      if (!isTrustedRunnerFrame(event)) {
         console.warn('[ZaloWebView] Từ chối xpath:state từ frame không phải mainFrame');
-        return;
-      }
-
-      try {
-        const senderOrigin = new URL(event.senderFrame.url).origin;
-        const expectedOrigin = new URL(currentProfile.url).origin;
-        if (senderOrigin !== expectedOrigin) {
-          return;
-        }
-      } catch {
         return;
       }
 
@@ -352,9 +389,9 @@ app.whenReady().then(async () => {
       attentionController?.onObservation(state);
     });
 
-    ipcMain.on('xpath:error', (event, errData: { type: string; message: string; selector: string }) => {
+    ipcMain.on('xpath:error', (event, errData: unknown) => {
       if (!mainWindow || !currentProfile) return;
-      if (event.senderFrame !== mainWindow.webContents.mainFrame) return;
+      if (!isTrustedRunnerFrame(event) || !isValidXPathErrorPayload(errData)) return;
 
       const signature = `${errData.type}:${errData.message}`;
       if (signature !== lastLoggedError) {
@@ -365,18 +402,23 @@ app.whenReady().then(async () => {
 
     ipcMain.on(
       'xpath:test-result',
-      (event, payload: { requestId: string; success: boolean; result?: XPathEvaluationResult; error?: string }) => {
+      (event, payload: unknown) => {
         if (!mainWindow || !currentProfile) return;
-        if (event.senderFrame !== mainWindow.webContents.mainFrame) return;
+        if (!isTrustedRunnerFrame(event) || !isValidXPathTestResultPayload(payload)) return;
 
         const pending = pendingXPathTests.get(payload.requestId);
-        if (pending) {
-          pendingXPathTests.delete(payload.requestId);
-          if (payload.result) {
-            pending.resolve(payload.result);
-          } else {
-            pending.reject(new Error(payload.error || 'Lỗi thử nghiệm XPath.'));
-          }
+        if (!pending) return;
+        if (
+          payload.result
+          && (payload.result.mode !== pending.mode || payload.result.selector.trim() !== pending.selector)
+        ) {
+          pending.reject(new Error('INVALID_RESPONSE: Kết quả XPath không khớp yêu cầu đang chờ.'));
+          return;
+        }
+        if (payload.success && payload.result) {
+          pending.resolve(payload.result);
+        } else {
+          pending.reject(new Error(payload.error || payload.result?.error || 'Lỗi thử nghiệm XPath.'));
         }
       }
     );
@@ -384,12 +426,14 @@ app.whenReady().then(async () => {
     // Start local Unix domain socket control channel
     runnerServer = new RunnerControlServer(profileId, {
       onStatus: (): RunnerStatusData => ({
-        status: 'running',
+        status: runnerStatus,
         profileId,
         url: currentProfile?.url || '',
         pid: process.pid,
         uptimeSeconds: Math.floor((Date.now() - startupTime) / 1000),
         windowState: currentWindowState || profileManager.loadWindowState(profileId),
+        configRevision: currentProfile?.updatedAt,
+        error: runnerLoadError,
         xpathState: lastXPathState || undefined,
         attention: attentionController?.getStatus()
       }),
@@ -400,29 +444,61 @@ app.whenReady().then(async () => {
       onClearAttention: () => ({
         cleared: attentionController?.clear() ?? false
       }),
-      onTestXPath: async (params: XPathTestRequestParams): Promise<XPathEvaluationResult> => {
+      onTestXPath: async (params: XPathTestRequestParams, signal?: AbortSignal): Promise<XPathEvaluationResult> => {
         if (!mainWindow || mainWindow.isDestroyed()) {
           throw new Error('RUNNER_CLOSED: Cửa sổ runner đã đóng.');
         }
 
+        const targetWindow = mainWindow;
         return new Promise<XPathEvaluationResult>((resolve, reject) => {
           const requestId = crypto.randomUUID();
-          pendingXPathTests.set(requestId, { resolve, reject });
+          const selector = params.selector.trim();
+          let settled = false;
+          let pending!: PendingXPathTest;
 
-          const onNavigation = () => {
-            if (pendingXPathTests.has(requestId)) {
-              pendingXPathTests.delete(requestId);
-              reject(new Error('PAGE_NAVIGATED: Trang web đã điều hướng trong khi đang thử nghiệm XPath.'));
+          const cleanup = () => {
+            targetWindow.webContents.removeListener('did-start-navigation', onNavigation);
+            signal?.removeEventListener('abort', onAbort);
+          };
+          const complete = (action: () => void) => {
+            if (settled) return;
+            settled = true;
+            cleanup();
+            if (pendingXPathTests.get(requestId) === pending) pendingXPathTests.delete(requestId);
+            action();
+          };
+          const onNavigation = (_event: unknown, _url: string, _isInPlace: boolean, isMainFrame: boolean) => {
+            if (isMainFrame) {
+              pending.reject(new Error('PAGE_NAVIGATED: Trang web đã điều hướng trong khi đang thử nghiệm XPath.'));
             }
           };
+          const onAbort = () => {
+            pending.reject(new Error('TIMEOUT: Quá thời gian chờ phản hồi kết quả XPath từ trang web.'));
+          };
 
-          mainWindow?.webContents.once('did-start-navigation', onNavigation);
+          pending = {
+            selector,
+            mode: params.mode,
+            resolve: (result) => complete(() => resolve(result)),
+            reject: (error) => complete(() => reject(error))
+          };
+          pendingXPathTests.set(requestId, pending);
+          targetWindow.webContents.on('did-start-navigation', onNavigation);
+          if (signal?.aborted) {
+            onAbort();
+            return;
+          }
+          signal?.addEventListener('abort', onAbort, { once: true });
 
-          mainWindow?.webContents.send('xpath:test', {
-            requestId,
-            selector: params.selector,
-            mode: params.mode
-          });
+          try {
+            targetWindow.webContents.send('xpath:test', {
+              requestId,
+              selector,
+              mode: params.mode
+            });
+          } catch (error: unknown) {
+            pending.reject(error instanceof Error ? error : new Error('RUNNER_CLOSED: Không thể gửi yêu cầu XPath.'));
+          }
         });
       }
     });

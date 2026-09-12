@@ -169,6 +169,10 @@ export interface RunnerStatusData {
   pid: number;
   uptimeSeconds: number;
   windowState: WindowState;
+  /** Timestamp/revision of the profile snapshot loaded by this runner. */
+  configRevision?: string;
+  /** Main-frame loading error, when status is error. */
+  error?: string;
   xpathState?: XPathObservationState;
   attention?: AttentionStateData;
 }

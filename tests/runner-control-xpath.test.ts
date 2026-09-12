@@ -7,8 +7,10 @@ import { RunnerControlServer } from '../src/main/runner-control';
 import {
   RunnerControlRequest,
   RunnerControlResponse,
-  XPathEvaluationResult
+  XPathEvaluationResult,
+  XPathTestRequestParams
 } from '../src/shared/types';
+import { RunnerControlServerOptions } from '../src/main/runner-control';
 
 describe('RunnerControlServer: test-xpath action', () => {
   let tempDir: string;
@@ -209,4 +211,40 @@ describe('RunnerControlServer: test-xpath action', () => {
     const firstRes = await firstPromise;
     expect(firstRes.success).toBe(true);
   });
+
+  it('aborts the pending XPath callback when the socket timeout fires', async () => {
+    let receivedSignal: AbortSignal | undefined;
+    const callback = async (...args: unknown[]): Promise<XPathEvaluationResult> => {
+      receivedSignal = args[1] as AbortSignal | undefined;
+      return new Promise<XPathEvaluationResult>(() => {
+        // The server timeout must abort this pending operation.
+      });
+    };
+
+    server = new RunnerControlServer('test-profile-timeout', {
+      onStatus: () => ({
+        status: 'running',
+        profileId: 'test-profile-timeout',
+        url: 'https://test.com',
+        pid: process.pid,
+        uptimeSeconds: 10,
+        windowState: { width: 800, height: 600, isMaximized: false }
+      }),
+      onShutdown: () => {},
+      onTestXPath: callback as unknown as NonNullable<RunnerControlServerOptions['onTestXPath']>
+    });
+
+    await server.start();
+    socketPath = server.getSocketPath();
+
+    const response = await sendSocketRequest({
+      requestId: 'req-timeout',
+      action: 'test-xpath',
+      params: { selector: '//timeout', mode: 'existence' } as XPathTestRequestParams
+    });
+
+    expect(response.success).toBe(false);
+    expect(response.error).toContain('TIMEOUT');
+    expect(receivedSignal?.aborted).toBe(true);
+  }, 7000);
 });

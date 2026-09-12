@@ -18,7 +18,7 @@ export interface RunnerControlServerOptions {
   onStatus: () => RunnerStatusData | Promise<RunnerStatusData>;
   onShutdown: () => void | Promise<void>;
   onClearAttention?: () => { cleared: boolean } | Promise<{ cleared: boolean }>;
-  onTestXPath?: (params: XPathTestRequestParams) => Promise<XPathEvaluationResult>;
+  onTestXPath?: (params: XPathTestRequestParams, signal?: AbortSignal) => Promise<XPathEvaluationResult>;
 }
 
 export class RunnerControlServer {
@@ -229,11 +229,29 @@ export class RunnerControlServer {
             this.isTestXPathPending = true;
             const timeoutMs = 5000;
             let finished = false;
-
-            const timer = setTimeout(() => {
+            let timer: ReturnType<typeof setTimeout> | null = null;
+            const abortController = new AbortController();
+            const onSocketClose = () => {
               if (!finished) {
                 finished = true;
                 this.isTestXPathPending = false;
+                abortController.abort();
+                if (timer) clearTimeout(timer);
+              }
+            };
+            const complete = (): boolean => {
+              if (finished) return false;
+              finished = true;
+              this.isTestXPathPending = false;
+              if (timer) clearTimeout(timer);
+              socket.removeListener('close', onSocketClose);
+              return true;
+            };
+            socket.once('close', onSocketClose);
+
+            timer = setTimeout(() => {
+              if (complete()) {
+                abortController.abort();
                 const response: RunnerControlResponse = {
                   requestId,
                   success: false,
@@ -247,12 +265,9 @@ export class RunnerControlServer {
               const result = await this.options.onTestXPath({
                 selector: params.selector.trim(),
                 mode: params.mode
-              });
+              }, abortController.signal);
 
-              if (!finished) {
-                finished = true;
-                clearTimeout(timer);
-                this.isTestXPathPending = false;
+              if (complete()) {
 
                 const isSuccess = result.status === 'match' || result.status === 'no_match';
                 const response: RunnerControlResponse = {
@@ -264,10 +279,7 @@ export class RunnerControlServer {
                 socket.write(JSON.stringify(response) + '\n');
               }
             } catch (err: unknown) {
-              if (!finished) {
-                finished = true;
-                clearTimeout(timer);
-                this.isTestXPathPending = false;
+              if (complete()) {
 
                 const response: RunnerControlResponse = {
                   requestId,

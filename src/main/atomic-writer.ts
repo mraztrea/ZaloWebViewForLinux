@@ -8,7 +8,17 @@ import * as path from 'node:path';
  * If an error occurs during writing or syncing, the temporary file is removed
  * and the original target file remains untouched.
  */
-export function atomicWriteFile(targetPath: string, content: string | Buffer): void {
+export type AtomicFileMode = 0o600 | 0o644;
+
+export function atomicWriteFile(
+  targetPath: string,
+  content: string | Buffer,
+  mode: AtomicFileMode = 0o600
+): void {
+  if (mode !== 0o600 && mode !== 0o644) {
+    throw new RangeError('Chỉ hỗ trợ mode file 0600 hoặc 0644.');
+  }
+
   const dir = path.dirname(targetPath);
   fs.mkdirSync(dir, { recursive: true, mode: 0o700 });
 
@@ -17,14 +27,14 @@ export function atomicWriteFile(targetPath: string, content: string | Buffer): v
 
   let fd: number | null = null;
   try {
-    fd = fs.openSync(tmpPath, 'w', 0o600);
+    fd = fs.openSync(tmpPath, 'w', mode);
     const buffer = typeof content === 'string' ? Buffer.from(content, 'utf-8') : content;
     fs.writeFileSync(fd, buffer);
     fs.fsyncSync(fd);
     fs.closeSync(fd);
     fd = null;
 
-    fs.chmodSync(tmpPath, 0o600);
+    fs.chmodSync(tmpPath, mode);
     fs.renameSync(tmpPath, targetPath);
   } catch (error) {
     if (fd !== null) {

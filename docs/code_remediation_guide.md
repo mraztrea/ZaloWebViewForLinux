@@ -1,6 +1,6 @@
 # Hướng dẫn xử lý các điểm code ảnh hưởng phase 4–5
 
-Ngày rà soát: 12/09/2026. Mốc code `27a7681`, nhánh `develop`. Đây là hướng dẫn cho lần triển khai sau; không có code, test hoặc cấu hình chạy nào được sửa trong đợt tài liệu này. Không mở rộng tài liệu riêng cho phase 1–3.
+Ngày rà soát: 12/09/2026. Mốc rà soát ban đầu `27a7681`, nhánh `develop`; phần sửa hiện tại chưa commit. R02–R06 đã được triển khai và kiểm tra tự động; R01 vẫn chờ phương án đóng gói launcher có thể nghiệm thu. Không mở rộng tài liệu riêng cho phase 1–3.
 
 ## Căn cứ và giới hạn
 
@@ -11,11 +11,23 @@ Ngày rà soát: 12/09/2026. Mốc code `27a7681`, nhánh `develop`. Đây là h
 | Node.js của môi trường | `v24.20.0` |
 | Electron trong lockfile | `44.3.0` |
 | Vitest trong lockfile | `3.2.7` |
-| `npm run typecheck` | Đạt |
-| `npm test` | 14 file, 102 test đạt |
-| Build/runtime/desktop trong lần biên soạn | Chưa chạy nghiệm thu thực |
+| `npm run typecheck` sau sửa | Đạt |
+| `npm test` sau sửa | 15 file, 107 test đạt |
+| `npm run build` sau sửa | Đạt |
+| Runtime Electron/desktop trong lần sửa | Chưa chạy nghiệm thu thực |
 
-Test đạt không chứng minh các ca chưa có test đã đúng. Bằng chứng cũ trong `specs/004-desktop-attention-tray/quickstart.md` ghi Electron không kết nối được `wayland-0`; không được diễn giải là KDE Wayland đạt hoặc chắc chắn không hỗ trợ.
+Test đạt không chứng minh các ca desktop chưa chạy đã đúng. Bằng chứng cũ trong `specs/004-desktop-attention-tray/quickstart.md` ghi Electron không kết nối được `wayland-0`; không được diễn giải là KDE Wayland đạt hoặc chắc chắn không hỗ trợ.
+
+## Trạng thái sau lần sửa
+
+| Mã | Trạng thái code | Bằng chứng |
+| --- | --- | --- |
+| R01 | Chưa hoàn tất | Launcher vẫn phụ thuộc runtime Electron trong checkout; chưa có artifact/phương án cài được thử từ desktop session |
+| R02 | Đã xử lý | `atomicWriteFile` giữ mặc định `0600`, nhận `0600/0644`; test kiểm tra mode và rollback hiện có |
+| R03 | Đã xử lý ở hợp đồng/runtime hook | Runner status có `starting/running/error`, `configRevision`, lỗi `did-fail-load`; cần smoke Electron để xác minh event thực |
+| R04 | Đã xử lý | Profile ID có thư mục dữ liệu còn lại bị từ chối hoặc tự sinh hậu tố; test giữ marker session |
+| R05 | Đã xử lý ở kênh điều khiển và callback | Timeout/socket close phát `AbortSignal`; main dọn map, timer/listener trên success, lỗi, navigation, abort, close |
+| R06 | Đã xử lý | Payload error/result có type guard, giới hạn kích thước, origin/main-frame và request/mode/selector được đối chiếu |
 
 ## Phần chưa triển khai theo lộ trình
 
@@ -37,7 +49,7 @@ Test đạt không chứng minh các ca chưa có test đã đúng. Bằng chứ
 
 **Ảnh hưởng:** đúng cho registry/permission, nhưng nếu phase 4 dùng nguyên API để ghi entry sẽ không đáp ứng mode `0644` của đặc tả. Đây là điểm cần mở rộng có chủ đích, không phải lỗi quyền registry.
 
-**Hướng sửa:** P4-T2 có thể thêm tham số mode giới hạn `0o600 | 0o644`, mặc định giữ `0o600`; áp mode trước rename. Chạy impact `atomicWriteFile` và báo mọi caller storage/permission bị ảnh hưởng trước sửa; không đổi mặc định toàn bộ app thành `0644`.
+**Đã thực hiện:** thêm tham số mode giới hạn `0o600 | 0o644`, mặc định giữ `0o600`; áp mode trước rename. Impact trước sửa cho thấy 4 caller trực tiếp và rủi ro graph `CRITICAL`, nên không đổi mặc định toàn bộ app.
 
 **Ca kiểm tra:** stat registry vẫn `0600`, entry `0644`; lỗi write/fsync/rename giữ file cũ; file tạm được dọn. Dùng lại test atomic writer và thêm test service.
 
@@ -47,7 +59,7 @@ Test đạt không chứng minh các ca chưa có test đã đúng. Bằng chứ
 
 **Ảnh hưởng:** P5-02/P5-04 không thể phân biệt trang tải lỗi hoặc runner đang dùng config cũ bằng hợp đồng hiện có.
 
-**Hướng sửa:** P5-T1 nối trạng thái navigation/loading/error thực và revision snapshot lúc runner khởi động (có thể dùng `updatedAt` nhất quán) vào status. Manager so với profile mới lưu; không kết nối được thì unknown. Không đổi “đã spawn” thành “đang chạy thành công”.
+**Đã thực hiện:** nối trạng thái navigation/loading/error thực và `updatedAt` làm `configRevision` vào status. Manager tương lai phải so revision; kết nối lỗi vẫn cần được hiển thị là unknown. Smoke Electron chưa chạy nên chưa khẳng định event desktop.
 
 **Ca kiểm tra:** tải thành công, load failure, đang tải; lưu profile khi runner mở tạo restartRequired; khởi động lại xóa cờ; socket timeout giữ unknown. Kiểm tra trên handler thật, không chỉ type.
 
@@ -57,7 +69,7 @@ Test đạt không chứng minh các ca chưa có test đã đúng. Bằng chứ
 
 **Ảnh hưởng:** workflow P5-07 xóa profile rồi tạo lại cùng tên/ID có thể gắn profile mới với phiên đăng nhập cũ, trái yêu cầu không tự tái sử dụng ID.
 
-**Hướng sửa:** P5-T2 kiểm tra ID đã có dữ liệu khi cấp ID tự động hoặc ID chỉ định; chọn ID mới cho trường hợp tự sinh, từ chối ID chỉ định đã giữ session. Không xóa session để giải quyết trùng tên. Workflow Manager đợi dừng runner trước gọi xóa registry; hành động xóa session tách riêng và xác nhận native.
+**Đã thực hiện:** kiểm tra thư mục dữ liệu còn lại khi cấp ID tự động hoặc ID chỉ định; tự sinh ID mới hoặc từ chối ID chỉ định đã giữ session. Code không xóa session để giải quyết trùng tên. Workflow Manager vẫn phải đợi dừng runner trước khi gọi xóa registry; hành động xóa session tách riêng.
 
 **Ca kiểm tra:** tạo A, đặt marker session, xóa giữ dữ liệu, tạo cùng tên phải có ID khác; ID chỉ định cũ bị từ chối; marker còn nguyên; shutdown timeout không gọi delete.
 
@@ -67,7 +79,7 @@ Test đạt không chứng minh các ca chưa có test đã đúng. Bằng chứ
 
 **Ảnh hưởng:** Manager bấm thử lặp khi preload không trả lời có thể tích lũy pending request/listener; một test thành công vẫn để listener chờ navigation. Đây là kết luận từ vòng đời code, chưa phải phép đo memory leak runtime.
 
-**Hướng sửa:** P5-T4 quy tụ kết thúc request vào cleanup idempotent: gỡ map, timer, navigation/close listener ở cả success, lỗi, timeout, navigation và đóng cửa sổ. Đồng bộ timeout socket với hủy tác vụ main; response muộn/document cũ bị bỏ. Navigation chỉ hủy khi đổi document liên quan, không vì iframe không liên quan.
+**Đã thực hiện:** `RunnerControlServer` tạo `AbortSignal` và abort khi timeout/socket close; callback main có cleanup idempotent, gỡ map và listener ở success, lỗi, abort, navigation, close. Response muộn/request không còn trong map bị bỏ; navigation chỉ hủy main frame.
 
 **Ca kiểm tra:** fake timer cho nhiều request timeout, request thành công liên tiếp, đóng/nav trong khi chờ và late response; sau mỗi ca pending về 0 và listener count về mức ban đầu, không đổi baseline/attention. Bổ sung test đường main tích hợp vì test socket callback giả không bao phủ map này.
 
@@ -77,10 +89,10 @@ Test đạt không chứng minh các ca chưa có test đã đúng. Bằng chứ
 
 **Ảnh hưởng:** Manager không nên tin result chưa validate; payload null có thể làm handler ném lỗi, response sai mode/status/preview có thể đi vào UI. Chưa thực hiện khai thác qua website; đây là thiếu validation tại ranh giới IPC.
 
-**Hướng sửa:** P5-T4 kiểm tra object không null, sender WebContents/main frame/origin, request ID đang chờ, mode/selector tương ứng, status/count/preview hợp lệ trước sử dụng. Duy trì giới hạn preview 500, số nguyên an toàn, không nhận dữ liệu từ document cũ. Lỗi hiển thị an toàn bằng textContent.
+**Đã thực hiện:** thêm type guard cho object/error/result, giới hạn selector/error/preview/count/thời gian, kiểm tra sender main frame/origin, request ID đang chờ và đối chiếu mode/selector. Result sai hoặc từ document cũ bị bỏ; UI tương lai phải tiếp tục render bằng `textContent`.
 
 **Ca kiểm tra:** null/array/sai mode/count/preview quá dài, origin/frame lạ, ID sai và response muộn đều bị từ chối; result hợp lệ đi đúng form và không sửa config/baseline.
 
 ## Thứ tự xử lý khi được yêu cầu triển khai
 
-R01/R02 nằm trong phase 4; R03/R04 ở bước nền tảng Manager; R05/R06 trước khi nối nút thử XPath. Trước sửa phải cập nhật graph và chạy impact cho symbol liên quan theo AGENTS.md; rủi ro HIGH/CRITICAL phải báo, UNKNOWN phải kiểm tra thêm. Sau sửa chạy ca hồi quy, `npm run typecheck`, `npm test`, `npm run build`; trước commit chạy detect_changes đầy đủ. Chỉ đóng mục lỗi khi có bằng chứng kiểm tra thực tế.
+R01 vẫn nằm trong phase 4 và cần artifact cài đặt/desktop session. R02–R06 đã có ca hồi quy và chạy `npm run typecheck`, `npm test`, `npm run build`. Impact trước sửa đã chạy; `atomicWriteFile` có cảnh báo graph `CRITICAL`, các symbol còn lại có caller trực tiếp xác định. Trước commit vẫn phải chạy detect_changes đầy đủ; chỉ đóng R01 sau bằng chứng launcher thực tế.

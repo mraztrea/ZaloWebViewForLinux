@@ -7,8 +7,10 @@ import {
   ProfileRegistryCorruptError,
   ProfileValidationError,
   ProfileNotFoundError,
-  ProfileDuplicateIdError
+  ProfileDuplicateIdError,
+  ProfileDataExistsError
 } from '../src/main/profile-manager';
+import { resolveProfileDataDir } from '../src/main/xdg-paths';
 
 describe('ProfileManager & Validation', () => {
   let env: TestXdgEnvironment;
@@ -187,5 +189,31 @@ describe('ProfileManager & Validation', () => {
     manager.deleteProfile(profile.id);
     expect(manager.getProfile(profile.id)).toBeUndefined();
     expect(manager.loadRegistry().profiles.length).toBe(0);
+  });
+
+  it('does not reuse an ID whose profile data remains after deletion', () => {
+    const profile = manager.createProfile({
+      id: 'saved-session',
+      name: 'Saved Session',
+      url: 'https://chat.zalo.me'
+    });
+    const dataDir = resolveProfileDataDir(profile.id);
+    fs.mkdirSync(dataDir, { recursive: true });
+    fs.writeFileSync(path.join(dataDir, 'session-marker'), 'keep', 'utf8');
+
+    manager.deleteProfile(profile.id);
+
+    expect(() => manager.createProfile({
+      id: profile.id,
+      name: 'Saved Session Again',
+      url: 'https://chat.zalo.me'
+    })).toThrow(ProfileDataExistsError);
+
+    const recreated = manager.createProfile({
+      name: 'Saved Session',
+      url: 'https://chat.zalo.me'
+    });
+    expect(recreated.id).not.toBe(profile.id);
+    expect(fs.readFileSync(path.join(dataDir, 'session-marker'), 'utf8')).toBe('keep');
   });
 });
