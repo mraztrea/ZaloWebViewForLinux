@@ -17,6 +17,7 @@ import { resolveSocketPath } from './xdg-paths';
 export interface RunnerControlServerOptions {
   onStatus: () => RunnerStatusData | Promise<RunnerStatusData>;
   onShutdown: () => void | Promise<void>;
+  onClearAttention?: () => { cleared: boolean } | Promise<{ cleared: boolean }>;
   onTestXPath?: (params: XPathTestRequestParams) => Promise<XPathEvaluationResult>;
 }
 
@@ -26,6 +27,7 @@ export class RunnerControlServer {
   private profileId: string;
   private options: RunnerControlServerOptions;
   private isTestXPathPending = false;
+  private shutdownScheduled = false;
 
   constructor(profileId: string, options: RunnerControlServerOptions) {
     this.profileId = profileId;
@@ -88,7 +90,11 @@ export class RunnerControlServer {
 
           let request: RunnerControlRequest;
           try {
-            request = JSON.parse(messageLine);
+            const parsed: unknown = JSON.parse(messageLine);
+            if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+              throw new Error('request-not-object');
+            }
+            request = parsed as RunnerControlRequest;
           } catch {
             socket.write(
               JSON.stringify({
@@ -100,7 +106,9 @@ export class RunnerControlServer {
             return;
           }
 
-          const requestId = request.requestId || crypto.randomUUID();
+          const requestId = typeof request.requestId === 'string' && request.requestId
+            ? request.requestId
+            : crypto.randomUUID();
 
           if (request.action === 'status') {
             try {
@@ -127,10 +135,54 @@ export class RunnerControlServer {
             };
             socket.write(JSON.stringify(response) + '\n', () => {
               // Trigger shutdown after response is sent
-              setTimeout(() => {
-                this.options.onShutdown();
-              }, 50);
+              if (!this.shutdownScheduled) {
+                this.shutdownScheduled = true;
+                setTimeout(() => {
+                  void this.options.onShutdown();
+                }, 50);
+              }
             });
+          } else if (request.action === 'clear-attention') {
+            const params = request.params;
+            const hasUnexpectedParams = params !== undefined
+              && (typeof params !== 'object' || params === null || Array.isArray(params)
+                || Object.keys(params).length > 0);
+            if (hasUnexpectedParams) {
+              const response: RunnerControlResponse = {
+                requestId,
+                success: false,
+                error: 'INVALID_REQUEST: clear-attention không nhận tham số.'
+              };
+              socket.write(JSON.stringify(response) + '\n');
+              return;
+            }
+
+            if (!this.options.onClearAttention) {
+              const response: RunnerControlResponse = {
+                requestId,
+                success: false,
+                error: 'NOT_SUPPORTED: Runner chưa sẵn sàng để xóa cảnh báo.'
+              };
+              socket.write(JSON.stringify(response) + '\n');
+              return;
+            }
+
+            try {
+              const result = await this.options.onClearAttention();
+              const response: RunnerControlResponse = {
+                requestId,
+                success: true,
+                data: result
+              };
+              socket.write(JSON.stringify(response) + '\n');
+            } catch (err: unknown) {
+              const response: RunnerControlResponse = {
+                requestId,
+                success: false,
+                error: (err as Error).message || 'Lỗi không xác định khi xóa cảnh báo.'
+              };
+              socket.write(JSON.stringify(response) + '\n');
+            }
           } else if (request.action === 'test-xpath') {
             const params = request.params as XPathTestRequestParams | undefined;
             if (!params || typeof params.selector !== 'string' || !params.selector.trim()) {
@@ -316,8 +368,8 @@ export class RunnerControlServer {
  */
 export function sendSocketCommand(
   socketPath: string,
-  action: 'status' | 'shutdown',
-  params?: Record<string, unknown>,
+  action: RunnerControlRequest['action'],
+  params?: RunnerControlRequest['params'],
   timeoutMs: number = SOCKET_TIMEOUT_MS
 ): Promise<RunnerControlResponse> {
   return new Promise((resolve, reject) => {

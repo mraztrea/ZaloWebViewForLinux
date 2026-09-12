@@ -1,14 +1,18 @@
-import { app, BrowserWindow, ipcMain } from 'electron';
+import { app, BrowserWindow, Notification, ipcMain } from 'electron';
+import { spawn } from 'node:child_process';
 import * as path from 'node:path';
 import * as fs from 'node:fs';
 import * as crypto from 'node:crypto';
 import { parseCommandLineArgs, CommandLineError, getHelpText } from './cli';
 import { ProfileManager, ProfileRegistryCorruptError } from './profile-manager';
 import { resolveProfileDataDir, resolveDataDir } from './xdg-paths';
-import { createRunnerWindow } from './window-service';
+import { canCloseToTray, createRunnerWindow, restoreRunnerWindow } from './window-service';
 import { PermissionManager } from './permission-manager';
 import { RunnerControlServer } from './runner-control';
+import { AttentionController, isValidXPathObservationState } from './notifier';
+import { TrayManager } from './tray-manager';
 import {
+  DEFAULT_ZALO_UNREAD_BADGE_XPATH,
   Profile,
   WindowState,
   RunnerStatusData,
@@ -38,6 +42,11 @@ let runnerServer: RunnerControlServer | null = null;
 let currentProfile: Profile | null = null;
 let currentWindowState: WindowState | null = null;
 let lastXPathState: XPathObservationState | null = null;
+let attentionController: AttentionController | null = null;
+let activeNotification: Notification | null = null;
+let trayManager: TrayManager | null = null;
+let quitting = false;
+let runnerQuitFinalizing = false;
 let lastLoggedError = '';
 const pendingXPathTests = new Map<
   string,
@@ -91,7 +100,12 @@ if (cliArgs.mode === 'profile' && cliArgs.profileId) {
       profile = profileManager.createProfile({
         id: 'zalo',
         name: 'Zalo',
-        url: 'https://chat.zalo.me'
+        url: 'https://chat.zalo.me',
+        xpathConfig: {
+          selector: DEFAULT_ZALO_UNREAD_BADGE_XPATH,
+          mode: 'existence',
+          pollIntervalMs: 3000
+        }
       });
     }
   }
@@ -125,14 +139,8 @@ if (!gotLock) {
 }
 
 app.on('second-instance', () => {
-  if (mainWindow) {
-    if (mainWindow.isMinimized()) {
-      mainWindow.restore();
-    }
-    if (!mainWindow.isVisible()) {
-      mainWindow.show();
-    }
-    mainWindow.focus();
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    restoreRunnerWindow(mainWindow);
   }
 });
 
@@ -158,6 +166,134 @@ function createManagerWindow(): BrowserWindow {
   return win;
 }
 
+function restoreMainWindow(): void {
+  if (!mainWindow || mainWindow.isDestroyed()) return;
+  restoreRunnerWindow(mainWindow);
+}
+
+function getNotificationBody(state: XPathObservationState): string {
+  if (state.mode === 'badge_count') {
+    return `${state.count} tin nhắn mới`;
+  }
+  if (state.mode === 'text_content') {
+    const text = state.text.trim().slice(0, 160);
+    return text || 'Có hoạt động mới';
+  }
+  return 'Có tin nhắn mới';
+}
+
+function createAttentionController(profile: Profile): AttentionController {
+  return new AttentionController({
+    profileId: profile.id,
+    mode: profile.xpathConfig.mode,
+    desktopConfig: profile.desktopConfig,
+    effects: {
+      setFlash: (enabled) => {
+        if (!mainWindow || mainWindow.isDestroyed()) return;
+        try {
+          mainWindow.flashFrame(enabled);
+        } catch (err: unknown) {
+          console.warn('[ZaloWebView] Không thể cập nhật taskbar flash:', (err as Error).message);
+        }
+      },
+      setBadge: (count) => {
+        try {
+          app.setBadgeCount(count);
+        } catch (err: unknown) {
+          console.warn('[ZaloWebView] Không thể cập nhật taskbar badge:', (err as Error).message);
+        }
+      },
+      setTrayUnread: (unread, state) => {
+        trayManager?.setUnread(unread, state);
+      },
+      showPopup: (state) => {
+        if (!profile.desktopConfig.showDesktopNotification || !Notification.isSupported()) return false;
+        try {
+          const notification = new Notification({
+            title: profile.name,
+            body: getNotificationBody(state)
+          });
+          activeNotification = notification;
+          notification.on('click', restoreMainWindow);
+          notification.on('close', () => {
+            if (activeNotification === notification) activeNotification = null;
+          });
+          notification.show();
+          return true;
+        } catch (err: unknown) {
+          console.warn('[ZaloWebView] Không thể hiển thị desktop notification:', (err as Error).message);
+          return false;
+        }
+      },
+      closePopup: () => {
+        if (!activeNotification) return;
+        try {
+          activeNotification.close();
+        } finally {
+          activeNotification = null;
+        }
+      }
+    }
+  });
+}
+
+function launchManager(): void {
+  const args = app.isPackaged ? ['--manager'] : [app.getAppPath(), '--manager'];
+  try {
+    const child = spawn(process.execPath, args, { detached: true, stdio: 'ignore' });
+    child.on('error', (err: Error) => {
+      console.warn('[ZaloWebView] Không thể khởi chạy Manager:', err.message);
+    });
+    child.unref();
+  } catch (err: unknown) {
+    console.warn('[ZaloWebView] Không thể khởi chạy Manager:', (err as Error).message);
+  }
+}
+
+function requestRunnerQuit(): void {
+  if (quitting) return;
+  quitting = true;
+  attentionController?.dispose();
+  trayManager?.destroy();
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.close();
+  }
+  app.quit();
+}
+
+function initializeRunnerDesktopIntegration(profile: Profile): void {
+  attentionController?.dispose();
+  trayManager?.destroy();
+
+  attentionController = createAttentionController(profile);
+  trayManager = new TrayManager({
+    profile,
+    assetsDir: path.join(__dirname, '../assets'),
+    onOpenWindow: restoreMainWindow,
+    onClearAttention: () => {
+      attentionController?.clear();
+    },
+    onOpenManager: launchManager,
+    onQuitProfile: requestRunnerQuit
+  });
+  if (!trayManager.isReady()) {
+    console.warn(
+      `[ZaloWebView] Tray không khả dụng cho profile ${profile.id}; dùng lệnh "zaloview --profile ${profile.id}" để khôi phục cửa sổ.`
+    );
+  }
+
+  if (!mainWindow || mainWindow.isDestroyed()) return;
+  attentionController.setFocused(mainWindow.isFocused());
+  mainWindow.on('focus', () => attentionController?.setFocused(true));
+  mainWindow.on('blur', () => attentionController?.setFocused(false));
+  mainWindow.on('close', (event) => {
+    if (currentProfile && canCloseToTray(currentProfile, trayManager?.isReady() ?? false, quitting)) {
+      event.preventDefault();
+      mainWindow?.hide();
+    }
+  });
+}
+
 app.whenReady().then(async () => {
   if (cliArgs.mode === 'profile' && currentProfile) {
     const profileId = currentProfile.id;
@@ -177,6 +313,8 @@ app.whenReady().then(async () => {
         profileManager.saveWindowState(profileId, newState);
       }
     });
+
+    initializeRunnerDesktopIntegration(currentProfile);
 
     mainWindow.webContents.on('did-finish-load', () => {
       if (currentProfile?.xpathConfig) {
@@ -202,7 +340,16 @@ app.whenReady().then(async () => {
         return;
       }
 
+      if (!isValidXPathObservationState(state, currentProfile.xpathConfig.mode)) {
+        if (lastLoggedError !== 'invalid-state') {
+          lastLoggedError = 'invalid-state';
+          console.warn(`[ZaloWebView] Từ chối xpath:state không hợp lệ cho profile ${currentProfile.id}`);
+        }
+        return;
+      }
+
       lastXPathState = state;
+      attentionController?.onObservation(state);
     });
 
     ipcMain.on('xpath:error', (event, errData: { type: string; message: string; selector: string }) => {
@@ -243,14 +390,16 @@ app.whenReady().then(async () => {
         pid: process.pid,
         uptimeSeconds: Math.floor((Date.now() - startupTime) / 1000),
         windowState: currentWindowState || profileManager.loadWindowState(profileId),
-        xpathState: lastXPathState || undefined
+        xpathState: lastXPathState || undefined,
+        attention: attentionController?.getStatus()
       }),
       onShutdown: async () => {
         console.log(`[ZaloWebView] Nhận lệnh shutdown qua socket cho profile ${profileId}`);
-        if (mainWindow && !mainWindow.isDestroyed()) {
-          mainWindow.close();
-        }
+        requestRunnerQuit();
       },
+      onClearAttention: () => ({
+        cleared: attentionController?.clear() ?? false
+      }),
       onTestXPath: async (params: XPathTestRequestParams): Promise<XPathEvaluationResult> => {
         if (!mainWindow || mainWindow.isDestroyed()) {
           throw new Error('RUNNER_CLOSED: Cửa sổ runner đã đóng.');
@@ -305,6 +454,12 @@ app.whenReady().then(async () => {
             profileManager.saveWindowState(currentProfile!.id, newState);
           }
         });
+        initializeRunnerDesktopIntegration(currentProfile);
+        mainWindow.webContents.on('did-finish-load', () => {
+          if (currentProfile?.xpathConfig) {
+            mainWindow?.webContents.send('xpath:init', { config: currentProfile.xpathConfig });
+          }
+        });
       } else {
         mainWindow = createManagerWindow();
       }
@@ -315,10 +470,25 @@ app.whenReady().then(async () => {
   app.exit(1);
 });
 
-app.on('will-quit', async () => {
-  if (runnerServer) {
-    await runnerServer.stop();
-  }
+app.on('will-quit', (event) => {
+  if (cliArgs.mode !== 'profile' || runnerQuitFinalizing) return;
+
+  quitting = true;
+  attentionController?.dispose();
+  trayManager?.destroy();
+
+  if (!runnerServer) return;
+  event.preventDefault();
+  runnerQuitFinalizing = true;
+  const server = runnerServer;
+  void server.stop().finally(() => {
+    runnerServer = null;
+    app.quit();
+  });
+});
+
+app.on('before-quit', () => {
+  if (cliArgs.mode === 'profile') quitting = true;
 });
 
 app.on('window-all-closed', () => {

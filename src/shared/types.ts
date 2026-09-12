@@ -6,6 +6,9 @@ export const PROFILE_ID_REGEX = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 export const MAX_PROFILE_ID_LENGTH = 64;
 export const MAX_PROFILE_NAME_LENGTH = 120;
 export const MAX_XPATH_SELECTOR_LENGTH = 1000;
+export const MAX_XPATH_TEXT_PREVIEW_LENGTH = 500;
+export const DEFAULT_ZALO_UNREAD_BADGE_XPATH =
+  "//div[contains(concat(' ', normalize-space(@class), ' '), ' leftbar-unread-badge ')]";
 
 export const MIN_WINDOW_WIDTH = 400;
 export const MIN_WINDOW_HEIGHT = 300;
@@ -65,6 +68,12 @@ export interface XPathObservationState {
   text: string;
   changedForAlert: boolean;
   timestamp: number;
+}
+
+export interface AttentionStateData {
+  active: boolean;
+  mode: XPathObservationMode;
+  count: number;
 }
 
 export interface XPathBaselineRecord {
@@ -149,7 +158,7 @@ export interface PermissionStore {
  */
 export interface RunnerControlRequest {
   requestId: string;
-  action: 'status' | 'shutdown' | 'test-xpath';
+  action: 'status' | 'shutdown' | 'clear-attention' | 'test-xpath';
   params?: XPathTestRequestParams | Record<string, unknown>;
 }
 
@@ -161,6 +170,7 @@ export interface RunnerStatusData {
   uptimeSeconds: number;
   windowState: WindowState;
   xpathState?: XPathObservationState;
+  attention?: AttentionStateData;
 }
 
 export interface RunnerControlResponse {

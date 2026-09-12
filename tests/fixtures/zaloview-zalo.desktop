@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=ZaloView (Zalo)
+Comment=ZaloView runner fixture for desktop identity checks
+Exec=zaloview --profile zalo
+TryExec=zaloview
+Icon=zaloview-zalo
+Terminal=false
+Categories=Network;
