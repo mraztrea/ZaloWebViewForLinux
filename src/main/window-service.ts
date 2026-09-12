@@ -3,12 +3,55 @@ import { Profile, WindowState } from '../shared/types';
 import { clampWindowBounds } from './screen-utils';
 import { PermissionManager } from './permission-manager';
 
+export type RunnerWindowRestoreTarget = Pick<
+  BrowserWindow,
+  'isMinimized' | 'restore' | 'isVisible' | 'show' | 'focus'
+>;
+
+export interface RunnerWindowStateSource {
+  isMaximized: () => boolean;
+  getBounds: () => { x: number; y: number; width: number; height: number };
+  getNormalBounds?: () => { x: number; y: number; width: number; height: number };
+}
+
+export function restoreRunnerWindow(win: RunnerWindowRestoreTarget): void {
+  if (win.isMinimized()) win.restore();
+  if (!win.isVisible()) win.show();
+  win.focus();
+}
+
+export function canCloseToTray(profile: Profile, trayReady: boolean, quitting: boolean): boolean {
+  return !quitting && profile.desktopConfig.minimizeToTray && trayReady;
+}
+
+export function captureWindowState(win: RunnerWindowStateSource, previous: WindowState): WindowState {
+  if (win.isMaximized()) return { ...previous, isMaximized: true };
+  const bounds = win.getNormalBounds ? win.getNormalBounds() : win.getBounds();
+  return { ...previous, ...bounds, isMaximized: false };
+}
+
 export interface CreateRunnerWindowOptions {
   profile: Profile;
   windowState: WindowState;
   preloadPath: string;
   permissionManager?: PermissionManager;
   onWindowStateChange?: (newState: WindowState) => void;
+}
+
+export function shouldAllowProfilePermission(
+  profile: Profile,
+  permission: string,
+  requestingOrigin: string,
+  permissionManager: PermissionManager
+): boolean {
+  if (permission === 'notifications' && profile.desktopConfig.showDesktopNotification) {
+    try {
+      if (new URL(requestingOrigin).origin === new URL(profile.url).origin) return false;
+    } catch {
+      return false;
+    }
+  }
+  return permissionManager.isPermissionGranted(requestingOrigin, permission);
 }
 
 const ZALO_AUTH_HOST = 'id.zalo.me';
@@ -107,21 +150,19 @@ export function createRunnerWindow(options: CreateRunnerWindowOptions): BrowserW
   const notifyStateChange = () => {
     if (!onWindowStateChange) return;
 
-    const isMax = win.isMaximized();
-    if (!isMax) {
-      const bounds = win.getNormalBounds ? win.getNormalBounds() : win.getBounds();
+    const nextState = captureWindowState(win, {
+      ...currentNormalBounds,
+      isMaximized: win.isMaximized()
+    });
+    if (!nextState.isMaximized) {
       currentNormalBounds = {
-        x: bounds.x,
-        y: bounds.y,
-        width: bounds.width,
-        height: bounds.height
+        x: nextState.x,
+        y: nextState.y,
+        width: nextState.width,
+        height: nextState.height
       };
     }
-
-    onWindowStateChange({
-      ...currentNormalBounds,
-      isMaximized: isMax
-    });
+    onWindowStateChange(nextState);
   };
 
   const scheduleSave = () => {
@@ -141,14 +182,19 @@ export function createRunnerWindow(options: CreateRunnerWindowOptions): BrowserW
 
   if (permissionManager) {
     ses.setPermissionCheckHandler((_webContents, permission, requestingOrigin) => {
-      return permissionManager.isPermissionGranted(requestingOrigin, permission);
+      return shouldAllowProfilePermission(profile, permission, requestingOrigin, permissionManager);
     });
 
     ses.setPermissionRequestHandler((_webContents, permission, callback, details) => {
-      const origin = details.requestingUrl ? new URL(details.requestingUrl).origin : '';
-      if (permission === 'media') {
-        // Media (mic/cam) permission handling
-        const granted = permissionManager.isPermissionGranted(origin, permission);
+      let origin = '';
+      try {
+        origin = details.requestingUrl ? new URL(details.requestingUrl).origin : '';
+      } catch {
+        callback(false);
+        return;
+      }
+      if (permission === 'media' || permission === 'notifications') {
+        const granted = shouldAllowProfilePermission(profile, permission, origin, permissionManager);
         callback(granted);
         return;
       }

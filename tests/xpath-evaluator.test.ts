@@ -9,7 +9,8 @@ import {
 } from '../src/preload/xpath-evaluator';
 import {
   XPathBaselineRecord,
-  XPathEvaluationResult
+  XPathEvaluationResult,
+  DEFAULT_ZALO_UNREAD_BADGE_XPATH
 } from '../src/shared/types';
 
 // Mock standard XPathResult if not in browser environment
@@ -125,6 +126,24 @@ describe('evaluateXPath', () => {
     expect(result.hasElement).toBe(true);
     expect(result.count).toBe(1);
     expect(result.textPreview).toBe('Tab content');
+  });
+
+  it('matches the Zalo unread badge with an existence XPath', () => {
+    let requestedSelector = '';
+    const doc = createMockDocument((selector) => {
+      requestedSelector = selector;
+      return {
+        resultType: XPathResultMock.FIRST_ORDERED_NODE_TYPE,
+        singleNodeValue: { textContent: '' }
+      };
+    });
+
+    const result = evaluateXPath(doc, DEFAULT_ZALO_UNREAD_BADGE_XPATH, 'existence');
+
+    expect(requestedSelector).toContain('leftbar-unread-badge');
+    expect(result.status).toBe('match');
+    expect(result.hasElement).toBe(true);
+    expect(result.count).toBe(1);
   });
 
   it('evaluates badge_count mode correctly for valid numbers', () => {

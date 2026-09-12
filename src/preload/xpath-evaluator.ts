@@ -8,7 +8,8 @@ import {
   XPathObservationMode,
   XPathEvaluationResult,
   XPathObservationState,
-  XPathBaselineRecord
+  XPathBaselineRecord,
+  MAX_XPATH_TEXT_PREVIEW_LENGTH
 } from '../shared/types';
 
 export const HIGHLIGHT_OVERLAY_CLASS = '__zaloview_highlight_overlay__';
@@ -116,7 +117,7 @@ export function evaluateXPath(
   }
 
   const rawFullText = node.textContent || '';
-  const textPreview = rawFullText.trim().slice(0, 500);
+  const textPreview = rawFullText.trim().slice(0, MAX_XPATH_TEXT_PREVIEW_LENGTH);
 
   if (mode === 'existence') {
     return {

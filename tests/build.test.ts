@@ -11,6 +11,7 @@ describe('User Story 3: Build Pipeline and Sandbox Security Verification', () =>
   const rendererDist = path.join(distDir, 'renderer/manager/app.js');
   const htmlDist = path.join(distDir, 'renderer/manager/index.html');
   const cssDist = path.join(distDir, 'renderer/manager/styles.css');
+  const assetNames = ['default-icon.png', 'unread-icon.png'];
 
   it('should have all compiled artifacts and static assets in dist/', () => {
     expect(fs.existsSync(mainDist)).toBe(true);
@@ -18,6 +19,12 @@ describe('User Story 3: Build Pipeline and Sandbox Security Verification', () =>
     expect(fs.existsSync(rendererDist)).toBe(true);
     expect(fs.existsSync(htmlDist)).toBe(true);
     expect(fs.existsSync(cssDist)).toBe(true);
+    for (const assetName of assetNames) {
+      const sourceAsset = path.join(rootDir, 'assets', assetName);
+      const distAsset = path.join(distDir, 'assets', assetName);
+      expect(fs.statSync(sourceAsset).size).toBeGreaterThan(0);
+      expect(fs.statSync(distAsset).size).toBeGreaterThan(0);
+    }
   });
 
   it('should enforce strict sandbox isolation on renderer bundle', () => {

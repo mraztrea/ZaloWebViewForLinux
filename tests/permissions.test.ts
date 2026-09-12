@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { createTempXdgEnvironment, TestXdgEnvironment } from './test-utils';
+import { createSampleProfile, createTempXdgEnvironment, TestXdgEnvironment } from './test-utils';
 import { PermissionManager } from '../src/main/permission-manager';
+import { shouldAllowProfilePermission } from '../src/main/window-service';
 
 describe('PermissionManager', () => {
   let env: TestXdgEnvironment;
@@ -37,5 +38,33 @@ describe('PermissionManager', () => {
 
     const pm2 = new PermissionManager('test-acc');
     expect(pm2.isPermissionGranted('https://chat.zalo.me', 'media')).toBe(true);
+  });
+
+  it('suppresses website notifications when XPath desktop popup is enabled', () => {
+    const pm = new PermissionManager('test-acc');
+    pm.setPermission('https://chat.zalo.me', 'notifications', true);
+    const profile = createSampleProfile({
+      desktopConfig: { ...createSampleProfile().desktopConfig, showDesktopNotification: true }
+    });
+
+    expect(shouldAllowProfilePermission(profile, 'notifications', 'https://chat.zalo.me', pm)).toBe(false);
+  });
+
+  it('preserves the stored website notification choice when XPath popup is disabled', () => {
+    const pm = new PermissionManager('test-acc');
+    pm.setPermission('https://chat.zalo.me', 'notifications', true);
+    const profile = createSampleProfile({
+      desktopConfig: { ...createSampleProfile().desktopConfig, showDesktopNotification: false }
+    });
+
+    expect(shouldAllowProfilePermission(profile, 'notifications', 'https://chat.zalo.me', pm)).toBe(true);
+  });
+
+  it('does not suppress a different origin when XPath popup is enabled', () => {
+    const pm = new PermissionManager('test-acc');
+    pm.setPermission('https://id.zalo.me', 'notifications', true);
+    const profile = createSampleProfile();
+
+    expect(shouldAllowProfilePermission(profile, 'notifications', 'https://id.zalo.me', pm)).toBe(true);
   });
 });
