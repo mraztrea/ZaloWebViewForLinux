@@ -1,192 +1,122 @@
-# Kế Hoạch Triển Khai Theo Từng Giai Đoạn (Phased Implementation Roadmap)
+# Lộ trình triển khai 5 phase
 
-**Dự án:** Linux Webview Manager (Zalo & Custom Web Apps)  
-**Tài liệu tham chiếu thiết kế:** [docs/superpowers/specs/2026-09-12-linux-webview-manager-design.md](file:///home/buiducthanh/projects/canhan/ZaloWebView/docs/superpowers/specs/2026-09-12-linux-webview-manager-design.md)  
-**Mục tiêu:** Chia nhỏ toàn bộ dự án thành **5 Phase lũy tiến (Incremental Phases)**. Mỗi phase kết thúc đều mang lại một sản phẩm có thể chạy và nghiệm thu độc lập trước khi sang phase tiếp theo.
+Ngày cập nhật: 12/09/2026. Trạng thái: kế hoạch, chưa có phase nào được triển khai hoặc nghiệm thu.
 
----
+Thiết kế chuẩn: [Đặc tả kỹ thuật](design_specification.md). Đầu việc và kiểm tra chi tiết: [Kế hoạch 8 task](detailed_tasks_plan.md).
 
-## Bảng Tổng Quan Lộ Trình 5 Phase
+## Tổng quan
 
-| Phase | Tên Giai Đoạn | Trọng Tâm / Tính Năng Chính | Sản Phẩm Đầu Ra (Deliverable) |
-| :--- | :--- | :--- | :--- |
-| **Phase 1** | **Core Webview Runner & Session Isolation** | Khung dự án, CLI runner, cửa sổ frameless/PWA, cô lập cookie/cache bằng partition. | Mở được Zalo Web độc lập qua CLI, đăng nhập lưu phiên vĩnh viễn, đầy đủ quyền mic/cam WebRTC. |
-| **Phase 2** | **XPath Observer Engine & Deduplication** | Preload script, MutationObserver + Polling, trích xuất unread badge/text, chống spam thông báo. | Bắt sự kiện tin nhắn mới từ DOM của Zalo Web và bắn IPC lên Main process một cách chính xác. |
-| **Phase 3** | **Linux Desktop Integration & Attention Reset** | Làm sáng taskbar (`flashFrame`), badge số đếm, khay hệ thống (Tray), **tự động tắt active state khi focus**. | Trải nghiệm thông báo native hoàn chỉnh trên KDE Plasma và GNOME: taskbar sáng, tray đổi icon, focus tự tắt. |
-| **Phase 4** | **Start Menu Integration (.desktop Generator)** | Sinh file `~/.local/share/applications/zaloview-<id>.desktop`, cấu hình `StartupWMClass`, cập nhật desktop database. | Ứng dụng xuất hiện trên Start Menu (KDE/GNOME), gõ phím Super tìm thấy ngay, icon độc lập trên Dock. |
-| **Phase 5** | **Manager Dashboard GUI** | Giao diện Dashboard quản trị, thêm/sửa profile trực quan, công cụ test XPath trực tiếp, 1-click tạo shortcut. | Ứng dụng hoàn chỉnh 100% với giao diện quản lý đồ họa hiện đại, không cần chỉnh sửa config JSON thủ công. |
+| Phase | Task | Sản phẩm có thể kiểm tra |
+| --- | --- | --- |
+| 1 — Runner và dữ liệu | 1–3 | CLI mở hai profile độc lập, khóa đúng profile, giữ session và xác minh danh tính Linux |
+| 2 — XPath | 4 | Observer báo trạng thái đúng mode, bắt cả giảm/mất node, thử XPath trong session runner |
+| 3 — Desktop notification | 5 | Attention/badge/tray/popup và focus clear đúng trạng thái, có fallback desktop |
+| 4 — Shortcut | 6 | Desktop entry hợp lệ, chạy launcher đã cài, kiểm tra menu và pin |
+| 5 — Manager và nghiệm thu | 7–8 | GUI đầy đủ API, quản lý profile và báo cáo nghiệm thu theo môi trường |
 
----
+Chỉ chuyển phase khi tiêu chí của phase trước đã đạt trên môi trường phát triển đã ghi rõ. Tính năng desktop không được môi trường hỗ trợ phải ghi giới hạn; không coi đó là đã đạt toàn bộ nền tảng. Chưa có GUI ở các phase đầu nên dùng fixture cấu hình trong thư mục XDG thử nghiệm, không ghi đè cấu hình thật.
 
-## Chi Tiết Từng Phase
+## Phase 1 — Runner, dữ liệu và nền tảng Linux
 
----
+**Mục tiêu:** mở website bằng cửa sổ native không thanh địa chỉ/menu trình duyệt, giữ phiên riêng cho từng profile.
 
-### 🔹 Phase 1: Core Webview Runner & Session Isolation (MVP Cốt Lõi)
+- [ ] Task 1: chọn runtime còn hỗ trợ, khóa dependencies, build main/preload/renderer theo từng môi trường; launcher truyền argument đúng và chạy từ cwd khác.
+- [ ] Task 2: registry có schema/version, validate, ghi nguyên tử; runner chỉ đọc cấu hình và ghi window-state riêng.
+- [ ] Task 3: parser CLI, userData/sessionData và single-instance lock riêng, partition persist, sandbox và chính sách permission/navigation.
+- [ ] Socket status/shutdown riêng runner, schema/timeout/quyền filesystem và xử lý stale socket.
+- [ ] Thử sớm WM_CLASS/app ID với desktop entry fixture trên Electron đã chọn; chưa cần hoàn thiện service sinh shortcut.
+- [ ] Lưu normal bounds/maximized; lỗi loading và quyền mic/cam hiển thị rõ.
 
-> **Mục tiêu:** Xây dựng khung ứng dụng Electron + TypeScript, tạo cơ chế cấu hình profile bằng JSON và mở được cửa sổ webview độc lập, không thanh địa chỉ, cookies tách biệt hoàn toàn.
+**Nghiệm thu:**
 
-#### 1. Công việc cần thực hiện
-- [ ] Khởi tạo dự án: `package.json`, `tsconfig.json`, `vitest.config.ts`.
-- [ ] Cài đặt các dependencies: `electron`, `typescript`, `vitest`, `jsdom`.
-- [ ] Xây dựng thư viện kiểu dữ liệu chung: `src/shared/types.ts` (`Profile`, `XPathConfig`, `DesktopConfig`).
-- [ ] Xây dựng `ProfileManager` (`src/main/profile-manager.ts`):
-  - Tự động tạo thư mục `~/.config/zaloview/` và `Partitions/`.
-  - Đọc/ghi cấu hình các profile từ `~/.config/zaloview/profiles.json`.
-- [ ] Xây dựng `WindowService` (`src/main/window-service.ts`):
-  - Tạo `BrowserWindow` không header, auto-hide menu bar.
-  - Thiết lập phân vùng `partition: persist:zaloview_<profile.id>`.
-  - Cấp quyền WebRTC (Camera, Microphone, Notifications, Clipboard) phục vụ gọi thoại/video Zalo.
-  - Tự động lưu/khôi phục kích thước cửa sổ (`windowBounds`).
-- [ ] Xây dựng CLI Dispatcher cơ bản (`src/main/index.ts`):
-  - Hỗ trợ cờ lệnh `zaloview --profile <id>`.
-  - Cơ chế Single Instance Lock chống mở trùng cửa sổ.
+1. Sau build, `npm start -- --profile zalo` mở fixture profile `zalo`; argument không bị script start cố định thành Manager.
+2. Mở profile thứ hai: đăng nhập khác, dữ liệu không trộn. Đóng/mở lại giữ session khi website chưa thu hồi đăng nhập.
+3. Mở lại `zalo` khi minimized/đang startup chỉ khôi phục instance đó; không chiếm lock của profile khác.
+4. Camera/microphone chỉ được cấp theo origin và lựa chọn người dùng; từ chối vẫn dùng chat được.
+5. JSON hỏng báo lỗi và giữ nguyên file; sửa cấu hình không bị snapshot runner ghi đè khi đóng.
+6. Ghi kết quả đo danh tính trên backend đích; không dùng tùy chọn BrowserWindow không có API hoặc bỏ lỗi TypeScript.
 
-#### 2. Tiêu chí nghiệm thu (Acceptance Criteria)
-1. Chạy lệnh với profile mẫu:
-   ```bash
-   npm start -- --profile zalo
-   ```
-2. Cửa sổ Zalo Web mở lên không có thanh URL hay thanh menu (trông hệt như app PWA).
-3. Đăng nhập tài khoản Zalo, tắt cửa sổ đi và mở lại -> Vẫn giữ nguyên đăng nhập (cookies lưu trong partition độc lập).
-4. Tạo profile thứ 2 (`zaloview --profile test`), mở lên -> Là một phiên duyệt web hoàn toàn mới, không bị dính cookie của profile Zalo.
+## Phase 2 — XPath observer và so sánh trạng thái
 
----
+**Mục tiêu:** đọc trạng thái DOM và truyền sang main chính xác theo mẫu quan sát.
 
-### 🔹 Phase 2: XPath Observer Engine & Deduplication (Cơ Chế Bắt Tin Nhắn)
+- [ ] Task 4: ba mode existence, badge_count, text_content theo đặc tả; selector lỗi khác no-match.
+- [ ] MutationObserver bắt cả attributes, debounce 300 ms, polling mặc định 3000 ms; cleanup đầy đủ và quét lại khi resume/hiển thị.
+- [ ] IPC `xpath:init`, `xpath:state`, `xpath:error` nhất quán; main xác thực sender và payload.
+- [ ] Cập nhật baseline cả khi count giảm/node mất. Focus không reset baseline.
+- [ ] Thử XPath qua runner cùng session, không thay đổi config/baseline và không phát cảnh báo; có request ID và timeout.
 
-> **Mục tiêu:** Xây dựng module preload script chạy trong trang web để theo dõi sự biến đổi của DOM, đánh giá XPath trích xuất số tin chưa đọc/nội dung tin, và lọc chống spam thông báo.
+**Nghiệm thu:**
 
-#### 1. Công việc cần thực hiện
-- [ ] Viết module `XPathEvaluator` (`src/preload/xpath-evaluator.ts`):
-  - Hàm `evaluateXPath(document, selector)` trả về DOM Node.
-  - Hàm `extractXPathData(node, mode)` hỗ trợ 3 chế độ:
-    - `badge_count`: Đọc text, lọc ký tự số (ví dụ: `"3"` -> 3, `"99+"` -> 99).
-    - `text_content`: Lấy nội dung text tin nhắn.
-    - `existence`: Kiểm tra node có hiển thị hay không.
-- [ ] Viết module `AlertDeduplicator` (`src/preload/xpath-evaluator.ts`):
-  - Chống gửi lặp lại thông báo khi DOM không thay đổi.
-  - Thiết lập Cooldown (2000ms) giữa các lần bắn cảnh báo liên tiếp.
-  - Hàm `reset()` để xóa trạng thái khi người dùng đã đọc tin.
-- [ ] Viết `webview-preload.ts` (`src/preload/webview-preload.ts`):
-  - Kết hợp `MutationObserver` (bắt sự kiện thay đổi DOM tức thì kèm debounce 300ms) và fallback timer (3s - 5s).
-  - Bắn sự kiện IPC `xpath:alert` kèm dữ liệu `{ count, text, mode }` lên Main Process.
-- [ ] Viết Unit Tests kiểm thử độc lập cho module XPath & Deduplicator bằng Vitest + JSDOM.
+1. Test mode/parser/observer theo Task 4 đạt; `5 → 3 → 4` nhận đúng lần tăng cuối.
+2. Thay class làm selector đổi match được phát hiện; init lại không sinh timer trùng.
+3. Selector rỗng tắt observer; XPath lỗi hiển thị lỗi, không giả thành “không có tin”.
+4. Thử XPath trên trang đã đăng nhập của đúng profile, trả preview/no-match/error; kiểm tra navigation trong khi đang test.
+5. Selector Zalo thực tế phải được xác minh trên DOM tại lúc thử; ví dụ cũ không phải selector được bảo đảm.
 
-#### 2. Tiêu chí nghiệm thu (Acceptance Criteria)
-1. Chạy `npm test` -> Toàn bộ test case cho XPath evaluator và Deduplicator pass 100%.
-2. Mở Zalo Web với cấu hình XPath của badge thông báo (ví dụ: `//span[contains(@class, 'tab-red-dot')]`).
-3. Khi có người gửi tin nhắn đến tài khoản Zalo:
-   - Terminal Main Process in ra log IPC nhận được sự kiện `xpath:alert` với đúng số tin nhắn.
-   - Khi không có tin nhắn mới phát sinh, hệ thống không bắn log lặp lại thừa thãi.
+## Phase 3 — Thông báo Linux và xóa cảnh báo khi focus
 
----
+**Mục tiêu:** chuyển thay đổi XPath thành attention của từng runner, phục hồi cửa sổ và thoát an toàn.
 
-### 🔹 Phase 3: Linux Desktop Integration & Attention Reset (Tích Hợp Sâu Hệ Thống)
+- [ ] Task 5: main state machine quản lý flash, badge, tray và Electron Notification.
+- [ ] Cooldown popup 2000 ms, giữ sự kiện mới nhất; badge/tray vẫn cập nhật ngay.
+- [ ] Focus/clear-attention xóa attention, popup và timer chờ; giữ baseline DOM.
+- [ ] Icon unread khác icon thường, tooltip theo đúng mode; menu mở cửa sổ, xóa cảnh báo, mở Manager và thoát.
+- [ ] minimizeToTray mặc định tắt, chỉ bật theo lựa chọn; có cách khôi phục qua CLI/Manager kể cả tray host không hiển thị.
+- [ ] Quit đi qua lưu dữ liệu và dọn tài nguyên, không bị close-to-tray chặn.
 
-> **Mục tiêu:** Hiện thực hóa toàn bộ trải nghiệm tương tác với hệ điều hành Linux: làm sáng taskbar, hiển thị badge unread, khay hệ thống (tray), popup notification và tự động xóa cảnh báo khi focus cửa sổ.
+**Nghiệm thu:**
 
-#### 1. Công việc cần thực hiện
-- [ ] Xây dựng `LinuxNotifier` (`src/main/notifier.ts`):
-  - Kích hoạt làm sáng/nhấp nháy taskbar: `window.flashFrame(true)`.
-  - Hiển thị badge số đếm unread trên taskbar/dock qua DBus: `app.setBadgeCount(count)`.
-  - Gửi desktop notification qua giao thức `org.freedesktop.Notifications`.
-  - Xử lý sự kiện click vào popup notification -> Tự động khôi phục và focus cửa sổ.
-- [ ] Xây dựng `ProfileTrayManager` (`src/main/tray-manager.ts`):
-  - Tạo icon khay hệ thống (System Tray) cho từng profile.
-  - Khi có tin mới: Đổi icon sang chấm đỏ và hiển thị tooltip số tin nhắn.
-  - Menu ngữ cảnh chuột phải: Mở app, Đánh dấu đã đọc, Thoát.
-  - Bắt sự kiện đóng cửa sổ [X]: Ẩn cửa sổ (`window.hide()`) để app tiếp tục chạy ngầm trong Tray.
-  - Click chuột trái vào Tray: Hiện/ẩn cửa sổ nhanh.
-- [ ] **Hiện thực hóa cơ chế Focus Auto-Clear (`window.on('focus')`)**:
-  - Khi người dùng click vào cửa sổ webview:
-    1. Gọi `window.flashFrame(false)` -> Tắt nhấp nháy taskbar.
-    2. Gọi `app.setBadgeCount(0)` -> Xóa badge số đếm.
-    3. Trả icon System Tray về bình thường (xóa chấm đỏ).
-    4. Gửi tín hiệu IPC `window:focused` xuống preload để reset `AlertDeduplicator`.
+1. Ở nền nhận thay đổi mới: popup/attention hoạt động theo khả năng desktop được ghi rõ.
+2. `5 → focus → blur → 5` không báo lại; `5 → focus → blur → 6` tạo cảnh báo.
+3. Count giảm cập nhật badge, về zero xóa attention. Focus A không ảnh hưởng badge B.
+4. Tin dồn trong cooldown không spam popup; focus hoặc zero hủy popup đang chờ.
+5. X và Thoát khác nhau đúng lựa chọn; khôi phục cửa sổ được khi tray không hiện.
+6. Badge có thể cần desktop entry fixture từ phase 1 cho đến khi generator phase 4 hoàn tất. Không suy rằng API trả thành công đồng nghĩa icon hiển thị.
 
-#### 2. Tiêu chí nghiệm thu (Acceptance Criteria)
-1. Mở cửa sổ Zalo và thu nhỏ hoặc chuyển sang cửa sổ khác.
-2. Gửi tin nhắn đến:
-   - [ ] Thanh Taskbar/Dock của KDE hoặc GNOME nhấp nháy phát sáng (Urgency color).
-   - [ ] Icon trên Dock hiển thị badge đếm màu đỏ.
-   - [ ] Icon dưới khay hệ thống (Tray) đổi sang trạng thái có chấm đỏ.
-   - [ ] Popup thông báo của Linux xuất hiện góc màn hình.
-3. Nhấp chuột vào cửa sổ Zalo:
-   - [ ] Thanh Taskbar lập tức ngừng nhấp nháy.
-   - [ ] Badge số đếm trên Dock biến mất (về 0).
-   - [ ] Icon Tray trở lại bình thường.
-4. Bấm nút [X] ở góc cửa sổ -> Cửa sổ biến mất nhưng icon Tray vẫn còn, app vẫn tiếp tục nhận tin nhắn ngầm.
+## Phase 4 — Menu shortcut và cài launcher
 
----
+**Mục tiêu:** shortcut mở đúng runner từ desktop session và được liên kết đúng icon khi môi trường hỗ trợ.
 
-### 🔹 Phase 4: Start Menu Integration (.desktop Generator)
+- [ ] Task 6: sinh/cập nhật/xóa desktop entry dưới XDG_DATA_HOME/applications.
+- [ ] Exec trỏ launcher đã cài; encode đúng Desktop Entry/Exec, bỏ URL placeholder/action chưa hỗ trợ.
+- [ ] Đồng bộ filename, desktopName và WM_CLASS/app ID đã đo.
+- [ ] Ghi nguyên tử, mode 0644; lỗi shortcut trả riêng với kết quả lưu cấu hình.
+- [ ] Không phụ thuộc update-desktop-database để bảo đảm menu refresh; xử lý utility thiếu nếu dùng.
 
-> **Mục tiêu:** Tích hợp với Start Menu (Application Launcher) của KDE Plasma và GNOME Shell để từng website xuất hiện như một ứng dụng native độc lập, có icon riêng trên Dock.
+**Nghiệm thu:**
 
-#### 1. Công việc cần thực hiện
-- [ ] Xây dựng `DesktopService` (`src/main/desktop-service.ts`):
-  - Hàm sinh nội dung file `.desktop` chuẩn XDG Desktop Entry Specification.
-  - Thiết lập trường quan trọng:
-    - `Exec=zaloview --profile <id> %u`
-    - `Icon=<đường_dẫn_tuyệt_đối_tới_icon.png>`
-    - `StartupWMClass=zaloview-<id>`
-  - Lưu file vào thư mục: `~/.local/share/applications/zaloview-<id>.desktop`.
-  - Tự động gọi lệnh `update-desktop-database ~/.local/share/applications/`.
-  - Hàm xóa file `.desktop` khi profile bị xóa.
-- [ ] Cấu hình thuộc tính cửa sổ trong Electron (`WindowService`):
-  - Gán `wmClass: 'zaloview-' + profile.id` khi khởi tạo `BrowserWindow`.
-  - Đảm bảo Window Manager của Linux nhóm đúng cửa sổ vào icon riêng trên Dock thay vì icon Electron chung.
-- [ ] Xây dựng script tạo file nhị phân chạy toàn cục (`bin/zaloview.js`).
+1. Fixture sinh ra qua `desktop-file-validate` khi có utility; kiểm tra tên/đường dẫn chứa ký tự đặc biệt và input injection.
+2. Menu KDE/GNOME tìm thấy profile, shortcut mở đúng từ cwd/PATH khác môi trường dev.
+3. Mở shortcut lặp khôi phục runner cũ, không tạo cửa sổ trùng.
+4. Pin/unpin và icon riêng được kiểm tra trên backend đang dùng; Wayland không suy kết quả từ StartupWMClass.
+5. Tắt shortcut/xóa profile gỡ đúng file thuộc app; không xóa dữ liệu người dùng ngoài mục tiêu.
 
-#### 2. Tiêu chí nghiệm thu (Acceptance Criteria)
-1. Gọi hàm tạo shortcut cho profile `zalo`.
-2. Kiểm tra file `~/.local/share/applications/zaloview-zalo.desktop` đã được tạo với đầy đủ thông tin chuẩn.
-3. Nhấn phím **Super (phím Windows)** trên bàn phím:
-   - Gõ "Zalo" -> Ứng dụng hiển thị ngay trong danh sách tìm kiếm của KDE Kickoff / GNOME Shell.
-4. Click vào shortcut trên menu để mở Zalo:
-   - Cửa sổ mở lên với icon Zalo riêng biệt trên Dock/Taskbar.
-   - Có thể chuột phải vào icon trên Dock và chọn "Pin to Dash / Pin to Taskbar" như một phần mềm cài đặt từ hệ thống.
+## Phase 5 — Dashboard và nghiệm thu đầu cuối
 
----
+**Mục tiêu:** người dùng quản lý profile qua GUI, không cần sửa JSON thủ công.
 
-### 🔹 Phase 5: Manager Dashboard GUI (Giao Diện Quản Trị)
+- [ ] Task 7: bridge đủ handler và validation; cards, tìm kiếm, theme, thêm/sửa/xóa, trạng thái, launch và shortcut.
+- [ ] Form giữ mọi checkbox/trường khi edit; lỗi lưu không làm mất dữ liệu đang nhập, trạng thái cần mở lại được hiển thị.
+- [ ] Chọn/tải icon với giới hạn và fallback; không render HTML từ tên/URL.
+- [ ] Nút thử XPath trên runner đã lưu/mở/đăng nhập; hiển thị kết quả hoặc hướng dẫn/lỗi rõ ràng.
+- [ ] Xóa profile đợi runner dừng, giữ session mặc định; xóa session là thao tác riêng có xác nhận trong ứng dụng.
+- [ ] Task 8: build/test từ checkout sạch, smoke bản phân phối, kiểm thử thực và hướng dẫn chạy/cài.
 
-> **Mục tiêu:** Xây dựng giao diện Dashboard đồ họa hiện đại, cho phép người dùng thêm, sửa, xóa profile, cấu hình XPath, kiểm tra XPath trực quan và 1-click tạo shortcut Start Menu mà không cần can thiệp file cấu hình.
+**Nghiệm thu:**
 
-#### 1. Công việc cần thực hiện
-- [ ] Xây dựng Preload Bridge an toàn (`src/preload/manager-preload.ts`):
-  - Expose API `window.api`: `getProfiles()`, `saveProfile()`, `deleteProfile()`, `launchProfile()`, `testXPath()`.
-- [ ] Thiết kế giao diện HTML/CSS (`src/renderer/manager/index.html`, `styles.css`):
-  - Phong cách giao diện hiện đại (Dark theme, Clean layout).
-  - Khung lưới hiển thị danh sách profile dạng thẻ (Card view).
-  - Modal form Thêm / Chỉnh sửa profile:
-    - Nhập Tên, URL, Icon.
-    - Cấu hình XPath Selector & Mode.
-    - Các checkbox bật/tắt tính năng Desktop (Flash, Badge, Tray, Start Menu).
-- [ ] Xây dựng Logic Renderer (`src/renderer/manager/app.ts`):
-  - Render danh sách profile động.
-  - Bắt sự kiện form submit để lưu profile.
-  - Tích hợp nút **"Kiểm tra XPath"**: Mở webview ngầm thực thi XPath và hiển thị kết quả trực tiếp lên modal để người dùng biết XPath có hoạt động hay không.
-- [ ] Tích hợp chế độ chạy Manager vào `src/main/index.ts`:
-  - Khi chạy `zaloview` không kèm tham số hoặc `zaloview --manager`, cửa sổ Dashboard sẽ được mở ra.
+1. Từ GUI: thêm profile → mở/đăng nhập → thử XPath → nhận cảnh báo → focus clear → tạo shortcut → mở lại → sửa → xóa.
+2. Manager đóng không tắt runner; mở Manager từ tray vào instance Manager riêng.
+3. Test XSS/IPC origin, JSON hỏng, lỗi ghi, mạng lỗi, runner crash và socket cũ có kết quả đúng.
+4. Build/typecheck/test đạt và báo cáo ghi phiên bản runtime, môi trường Linux, kết quả thực tế.
 
-#### 2. Tiêu chí nghiệm thu (Acceptance Criteria)
-1. Chạy `zaloview` -> Giao diện Manager hiển thị đẹp mắt, trực quan.
-2. Nhấn "+ Thêm Profile Mới", nhập:
-   - Tên: `Zalo Cá Nhân`
-   - URL: `https://chat.zalo.me`
-   - XPath: `//span[contains(@class, 'tab-red-dot')]`
-   - Tích chọn: Bật sáng taskbar, Hiện badge, Thu nhỏ tray, Tạo Start Menu.
-3. Bấm "Lưu Profile":
-   - Thẻ profile xuất hiện trên màn hình chính.
-   - File shortcut trong Start Menu tự động được tạo.
-4. Bấm "Mở App" từ thẻ profile -> Cửa sổ Zalo mở lên và hoạt động hoàn hảo với đầy đủ các tính năng đã phát triển từ Phase 1 đến Phase 4.
+## Ma trận cần ghi khi nghiệm thu
 
----
+| Môi trường | Web/session | Alert/focus | Badge/tray | Menu/pin |
+| --- | --- | --- | --- | --- |
+| KDE Plasma / X11 | Chưa kiểm thử | Chưa kiểm thử | Chưa kiểm thử | Chưa kiểm thử |
+| KDE Plasma / Wayland | Chưa kiểm thử | Chưa kiểm thử | Chưa kiểm thử | Chưa kiểm thử |
+| GNOME / X11, nếu có | Chưa kiểm thử | Chưa kiểm thử | Chưa kiểm thử | Chưa kiểm thử |
+| GNOME / Wayland | Chưa kiểm thử | Chưa kiểm thử | Chưa kiểm thử | Chưa kiểm thử |
 
-## Tóm Tắt Nguyên Tắc Triển Khai (Execution Guidelines)
-
-1. **Tuân thủ thứ tự:** Thực hiện tuần tự từ Phase 1 ➔ Phase 5. Không nhảy cóc phase vì mỗi phase sau đều kế thừa nền tảng của phase trước.
-2. **Nghiệm thu trước khi chuyển tiếp:** Ở cuối mỗi phase, thực hiện toàn bộ các bước trong mục **Tiêu chí nghiệm thu**. Chỉ chuyển sang phase tiếp theo khi phase hiện tại đã hoạt động ổn định.
-3. **Commit Git rõ ràng:** Sau mỗi phase hoặc sau mỗi tính năng con hoàn thành, thực hiện commit với thông điệp rõ ràng (ví dụ: `feat(phase1): core webview runner with isolated partition`).
+Ghi extension tray/dock, notification service và chính sách không làm phiền khi chúng ảnh hưởng kết quả. Chỉ thay “Chưa kiểm thử” bằng kết quả có bằng chứng; không dự đoán PASS hoặc cam kết mọi môi trường giống nhau.
