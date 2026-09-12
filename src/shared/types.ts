@@ -50,10 +50,51 @@ export interface LauncherProcessState {
 /**
  * Profile and Configuration contracts (aligned with design_specification.md)
  */
+export type XPathObservationMode = 'badge_count' | 'text_content' | 'existence';
+
 export interface XPathConfig {
   selector: string; // empty string disables observer
-  mode: 'badge_count' | 'text_content' | 'existence';
+  mode: XPathObservationMode;
   pollIntervalMs: number; // 1000..60000 ms, default 3000
+}
+
+export interface XPathObservationState {
+  mode: XPathObservationMode;
+  hasElement: boolean;
+  count: number;
+  text: string;
+  changedForAlert: boolean;
+  timestamp: number;
+}
+
+export interface XPathBaselineRecord {
+  hasElement: boolean;
+  count: number;
+  fullText: string;
+  updatedAt: number;
+}
+
+export type XPathEvaluationStatus =
+  | 'match'
+  | 'no_match'
+  | 'invalid_selector'
+  | 'invalid_data'
+  | 'error';
+
+export interface XPathEvaluationResult {
+  status: XPathEvaluationStatus;
+  selector: string;
+  mode: XPathObservationMode;
+  hasElement: boolean;
+  count: number;
+  textPreview: string;
+  error?: string;
+  executionTimeMs: number;
+}
+
+export interface XPathTestRequestParams {
+  selector: string;
+  mode: XPathObservationMode;
 }
 
 export interface DesktopIntegrationConfig {
@@ -108,8 +149,8 @@ export interface PermissionStore {
  */
 export interface RunnerControlRequest {
   requestId: string;
-  action: 'status' | 'shutdown';
-  params?: Record<string, unknown>;
+  action: 'status' | 'shutdown' | 'test-xpath';
+  params?: XPathTestRequestParams | Record<string, unknown>;
 }
 
 export interface RunnerStatusData {
@@ -119,11 +160,12 @@ export interface RunnerStatusData {
   pid: number;
   uptimeSeconds: number;
   windowState: WindowState;
+  xpathState?: XPathObservationState;
 }
 
 export interface RunnerControlResponse {
   requestId: string;
   success: boolean;
-  data?: RunnerStatusData | Record<string, unknown>;
+  data?: RunnerStatusData | XPathEvaluationResult | Record<string, unknown>;
   error?: string;
 }

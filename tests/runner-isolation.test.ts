@@ -2,7 +2,12 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import * as path from 'node:path';
 import { createTempXdgEnvironment, TestXdgEnvironment, createSampleProfile, createSampleWindowState } from './test-utils';
 import { resolveProfileDataDir } from '../src/main/xdg-paths';
-import { buildRunnerWindowOptions, getPartitionForProfile } from '../src/main/window-service';
+import {
+  buildRunnerWindowOptions,
+  getChromeCompatibleUserAgent,
+  getPartitionForProfile,
+  isAllowedProfileNavigation
+} from '../src/main/window-service';
 
 describe('Runner Isolation & Window Options', () => {
   let env: TestXdgEnvironment;
@@ -52,5 +57,30 @@ describe('Runner Isolation & Window Options', () => {
     expect(options.webPreferences?.webSecurity).toBe(true);
     expect(options.webPreferences?.partition).toBe('persist:zaloview_acc-1');
     expect(options.webPreferences?.preload).toBe('/path/to/preload.js');
+  });
+
+  it('keeps profile and Zalo auth URLs inside the runner', () => {
+    expect(isAllowedProfileNavigation('https://chat.zalo.me', 'https://chat.zalo.me/')).toBe(true);
+    expect(isAllowedProfileNavigation(
+      'https://chat.zalo.me',
+      'https://id.zalo.me/account?continue=https%3A%2F%2Fchat.zalo.me%2F'
+    )).toBe(true);
+    expect(isAllowedProfileNavigation(
+      'https://chat.zalo.me',
+      'https://id.zalo.me/login?from=chat'
+    )).toBe(true);
+    expect(isAllowedProfileNavigation(
+      'https://chat.zalo.me',
+      'https://id.zalo.me.evil.example/account'
+    )).toBe(false);
+    expect(isAllowedProfileNavigation('https://chat.zalo.me', 'https://accounts.zalo.me')).toBe(false);
+  });
+
+  it('removes Electron app markers from the default user agent', () => {
+    const electronUserAgent = 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) ZaloWebView/0.1.0 Chrome/152.0.7977.78 Electron/44.3.0 Safari/537.36';
+    const chromeUserAgent = 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/152.0.7977.78 Safari/537.36';
+
+    expect(getChromeCompatibleUserAgent(electronUserAgent)).toBe(chromeUserAgent);
+    expect(getChromeCompatibleUserAgent(chromeUserAgent)).toBe(chromeUserAgent);
   });
 });

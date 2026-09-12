@@ -11,6 +11,29 @@ export interface CreateRunnerWindowOptions {
   onWindowStateChange?: (newState: WindowState) => void;
 }
 
+const ZALO_AUTH_HOST = 'id.zalo.me';
+
+export function isAllowedProfileNavigation(profileUrl: string, targetUrl: string): boolean {
+  try {
+    const profile = new URL(profileUrl);
+    const target = new URL(targetUrl);
+
+    if (target.origin === profile.origin) {
+      return true;
+    }
+
+    return target.protocol === 'https:' && target.hostname === ZALO_AUTH_HOST && target.port === '';
+  } catch {
+    return false;
+  }
+}
+
+export function getChromeCompatibleUserAgent(userAgent: string): string {
+  return userAgent
+    .replace(/\s+\S+\/\S+(?=\s+Chrome\/)/, '')
+    .replace(/\s+Electron\/\S+/, '');
+}
+
 export function getPartitionForProfile(profileId: string): string {
   return `persist:zaloview_${profileId}`;
 }
@@ -71,6 +94,9 @@ export function createRunnerWindow(options: CreateRunnerWindowOptions): BrowserW
   );
 
   const win = new BrowserWindow(winOptions);
+  win.webContents.setUserAgent(
+    profile.userAgent || getChromeCompatibleUserAgent(win.webContents.getUserAgent())
+  );
 
   if (windowState.isMaximized) {
     win.maximize();
@@ -131,30 +157,28 @@ export function createRunnerWindow(options: CreateRunnerWindowOptions): BrowserW
     });
   }
 
-  // Navigation safeguard: restrict navigation within profile origin
-  let profileOrigin = '';
-  try {
-    profileOrigin = new URL(profile.url).origin;
-  } catch {
-    // ignore
-  }
-
   win.webContents.on('will-navigate', (event, targetUrl) => {
+    if (isAllowedProfileNavigation(profile.url, targetUrl)) {
+      return;
+    }
+
     try {
-      const targetOrigin = new URL(targetUrl).origin;
-      if (profileOrigin && targetOrigin !== profileOrigin) {
-        event.preventDefault();
-        shell.openExternal(targetUrl).catch((err: Error) => {
-          console.error('[ZaloWebView] Không thể mở URL ngoại vi:', err);
-        });
-      }
+      new URL(targetUrl);
+      event.preventDefault();
+      shell.openExternal(targetUrl).catch((err: Error) => {
+        console.error('[ZaloWebView] Không thể mở URL ngoại vi:', err);
+      });
     } catch {
       event.preventDefault();
     }
   });
 
-  // Popups / window.open safeguard: open externally
+  // Keep profile and Zalo auth popups in Electron; open other links externally.
   win.webContents.setWindowOpenHandler((details) => {
+    if (isAllowedProfileNavigation(profile.url, details.url)) {
+      return { action: 'allow' };
+    }
+
     shell.openExternal(details.url).catch((err: Error) => {
       console.error('[ZaloWebView] Lỗi mở liên kết ngoài:', err);
     });
