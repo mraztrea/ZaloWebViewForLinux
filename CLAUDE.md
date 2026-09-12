@@ -1,7 +1,15 @@
 
-# Claude Instructions - ZaloWebView
+# Hướng dẫn cho Claude - ZaloWebView
 
 Hướng dẫn và quy tắc bắt buộc dành cho Claude Code khi làm việc trong dự án **ZaloWebView**.
+
+---
+
+## 0. Quy định ngôn ngữ
+
+- Toàn bộ tài liệu, đặc tả, kế hoạch, checklist và hướng dẫn trong dự án phải được viết bằng tiếng Việt.
+- Luôn phản hồi và trả lời người dùng bằng tiếng Việt, trừ khi người dùng yêu cầu ngôn ngữ khác.
+- Giữ nguyên tên lệnh, tên file, mã nguồn, API, định danh kỹ thuật và nội dung bắt buộc của công cụ khi không thể Việt hóa.
 
 ---
 
