@@ -4,6 +4,20 @@
 
 export const PROFILE_ID_REGEX = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 export const MAX_PROFILE_ID_LENGTH = 64;
+export const MAX_PROFILE_NAME_LENGTH = 120;
+export const MAX_XPATH_SELECTOR_LENGTH = 1000;
+
+export const MIN_WINDOW_WIDTH = 400;
+export const MIN_WINDOW_HEIGHT = 300;
+export const DEFAULT_WINDOW_WIDTH = 1024;
+export const DEFAULT_WINDOW_HEIGHT = 768;
+
+export const MIN_POLL_INTERVAL_MS = 1000;
+export const MAX_POLL_INTERVAL_MS = 60000;
+export const DEFAULT_POLL_INTERVAL_MS = 3000;
+
+export const MAX_SOCKET_PAYLOAD_SIZE = 65536; // 64 KiB
+export const SOCKET_TIMEOUT_MS = 5000;
 
 export interface CommandLineArgs {
   mode: 'manager' | 'profile';
@@ -73,4 +87,43 @@ export interface WindowState {
 export interface ProfileRegistry {
   schemaVersion: 1;
   profiles: Profile[];
+}
+
+/**
+ * Permissions Store
+ */
+export interface PermissionRecord {
+  granted: boolean;
+  updatedAt: string;
+}
+
+export interface PermissionStore {
+  [origin: string]: {
+    [permission: string]: PermissionRecord;
+  };
+}
+
+/**
+ * Runner Control Socket Contracts
+ */
+export interface RunnerControlRequest {
+  requestId: string;
+  action: 'status' | 'shutdown';
+  params?: Record<string, unknown>;
+}
+
+export interface RunnerStatusData {
+  status: 'starting' | 'running' | 'error';
+  profileId: string;
+  url: string;
+  pid: number;
+  uptimeSeconds: number;
+  windowState: WindowState;
+}
+
+export interface RunnerControlResponse {
+  requestId: string;
+  success: boolean;
+  data?: RunnerStatusData | Record<string, unknown>;
+  error?: string;
 }

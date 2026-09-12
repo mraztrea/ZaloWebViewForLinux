@@ -1,18 +1,21 @@
 import { app, BrowserWindow } from 'electron';
 import * as path from 'node:path';
+import * as fs from 'node:fs';
 import { parseCommandLineArgs, CommandLineError, getHelpText } from './cli';
+import { ProfileManager, ProfileRegistryCorruptError } from './profile-manager';
+import { resolveProfileDataDir, resolveDataDir } from './xdg-paths';
+import { createRunnerWindow } from './window-service';
+import { PermissionManager } from './permission-manager';
+import { RunnerControlServer } from './runner-control';
+import { Profile, WindowState, RunnerStatusData } from '../shared/types';
 
 function extractUserArgs(): string[] {
   if (app.isPackaged) {
     return process.argv.slice(1);
   }
 
-  // In development mode, arguments typically appear as:
-  // [node/electron, electron_entry, app_root, ...user_args]
-  // Find the index of app root or take argv from index 2 onwards
   const args = process.argv.slice(2);
   if (args.length > 0) {
-    // If the first argument is the app directory (e.g. "." or absolute path), skip it
     const first = path.resolve(args[0]);
     const appPath = path.resolve(app.getAppPath());
     if (first === appPath || args[0] === '.' || args[0] === app.getAppPath()) {
@@ -23,67 +26,12 @@ function extractUserArgs(): string[] {
 }
 
 let mainWindow: BrowserWindow | null = null;
+let runnerServer: RunnerControlServer | null = null;
+let currentProfile: Profile | null = null;
+let currentWindowState: WindowState | null = null;
+const startupTime = Date.now();
 
-function createManagerWindow(): BrowserWindow {
-  const win = new BrowserWindow({
-    width: 900,
-    height: 650,
-    title: 'ZaloWebView Manager',
-    webPreferences: {
-      contextIsolation: true,
-      nodeIntegration: false,
-      sandbox: true,
-      preload: path.join(__dirname, '../preload/webview-preload.js')
-    }
-  });
-
-  const indexPath = path.join(__dirname, '../renderer/manager/index.html');
-  win.loadFile(indexPath).catch((err: Error) => {
-    console.error('[ZaloWebView] Không thể nạp giao diện Manager:', err);
-  });
-
-  return win;
-}
-
-function createRunnerWindow(profileId: string): BrowserWindow {
-  const win = new BrowserWindow({
-    width: 1024,
-    height: 768,
-    title: `ZaloWebView Runner [${profileId}]`,
-    webPreferences: {
-      contextIsolation: true,
-      nodeIntegration: false,
-      sandbox: true,
-      preload: path.join(__dirname, '../preload/webview-preload.js')
-    }
-  });
-
-  // Task 1 placeholder runner view
-  const htmlContent = `
-    <!DOCTYPE html>
-    <html>
-      <head>
-        <meta charset="UTF-8">
-        <title>ZaloWebView - ${profileId}</title>
-        <style>
-          body { font-family: sans-serif; background: #121417; color: #f0f3f6; padding: 40px; }
-          h1 { color: #0068ff; }
-        </style>
-      </head>
-      <body>
-        <h1>Profile Runner: ${profileId}</h1>
-        <p>Phiên runner khởi chạy thành công ở chế độ độc lập.</p>
-      </body>
-    </html>
-  `;
-  win.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(htmlContent)}`).catch((err: Error) => {
-    console.error(`[ZaloWebView] Lỗi nạp runner ${profileId}:`, err);
-  });
-
-  return win;
-}
-
-// Parse command line arguments before ready
+// 1. Parse CLI arguments before ready
 let cliArgs;
 try {
   const rawArgs = extractUserArgs();
@@ -112,10 +60,130 @@ try {
   }
 }
 
-app.whenReady().then(() => {
-  if (cliArgs.mode === 'profile' && cliArgs.profileId) {
-    console.log(`[ZaloWebView] Khởi chạy Profile Runner: ${cliArgs.profileId}`);
-    mainWindow = createRunnerWindow(cliArgs.profileId);
+// 2. Setup per-instance userData, sessionData, and Linux identity before ready
+const profileManager = new ProfileManager();
+
+if (cliArgs.mode === 'profile' && cliArgs.profileId) {
+  const profileId = cliArgs.profileId;
+  let profile = profileManager.getProfile(profileId);
+
+  // If profile is "zalo" and registry is empty, seed fixture profile
+  if (!profile && profileId === 'zalo') {
+    const registry = profileManager.loadRegistry();
+    if (registry.profiles.length === 0) {
+      profile = profileManager.createProfile({
+        id: 'zalo',
+        name: 'Zalo',
+        url: 'https://chat.zalo.me'
+      });
+    }
+  }
+
+  if (!profile) {
+    console.error(`[zaloview] Lỗi: Không tìm thấy profile với ID "${profileId}".`);
+    app.exit(1);
+    process.exit(1);
+  }
+  currentProfile = profile;
+
+  const profileDataDir = resolveProfileDataDir(profileId);
+  fs.mkdirSync(profileDataDir, { recursive: true, mode: 0o700 });
+  app.setPath('userData', profileDataDir);
+  app.setPath('sessionData', profileDataDir);
+  app.setDesktopName(`zaloview-${profileId}`);
+} else {
+  const managerDataDir = path.join(resolveDataDir(), 'manager');
+  fs.mkdirSync(managerDataDir, { recursive: true, mode: 0o700 });
+  app.setPath('userData', managerDataDir);
+  app.setPath('sessionData', managerDataDir);
+  app.setDesktopName('zaloview');
+}
+
+// 3. Acquire Single-Instance lock for this specific profile or manager instance
+const gotLock = app.requestSingleInstanceLock();
+if (!gotLock) {
+  // Another instance of this profile/manager is already running
+  app.exit(0);
+  process.exit(0);
+}
+
+app.on('second-instance', () => {
+  if (mainWindow) {
+    if (mainWindow.isMinimized()) {
+      mainWindow.restore();
+    }
+    if (!mainWindow.isVisible()) {
+      mainWindow.show();
+    }
+    mainWindow.focus();
+  }
+});
+
+function createManagerWindow(): BrowserWindow {
+  const win = new BrowserWindow({
+    width: 900,
+    height: 650,
+    title: 'ZaloWebView Manager',
+    autoHideMenuBar: true,
+    webPreferences: {
+      contextIsolation: true,
+      nodeIntegration: false,
+      sandbox: true,
+      preload: path.join(__dirname, '../preload/webview-preload.js')
+    }
+  });
+
+  const indexPath = path.join(__dirname, '../renderer/manager/index.html');
+  win.loadFile(indexPath).catch((err: Error) => {
+    console.error('[ZaloWebView] Không thể nạp giao diện Manager:', err);
+  });
+
+  return win;
+}
+
+app.whenReady().then(async () => {
+  if (cliArgs.mode === 'profile' && currentProfile) {
+    const profileId = currentProfile.id;
+    console.log(`[ZaloWebView] Khởi chạy Profile Runner: ${profileId}`);
+
+    currentWindowState = profileManager.loadWindowState(profileId);
+    const permissionManager = new PermissionManager(profileId);
+    const preloadPath = path.join(__dirname, '../preload/webview-preload.js');
+
+    mainWindow = createRunnerWindow({
+      profile: currentProfile,
+      windowState: currentWindowState,
+      preloadPath,
+      permissionManager,
+      onWindowStateChange: (newState) => {
+        currentWindowState = newState;
+        profileManager.saveWindowState(profileId, newState);
+      }
+    });
+
+    // Start local Unix domain socket control channel
+    runnerServer = new RunnerControlServer(profileId, {
+      onStatus: (): RunnerStatusData => ({
+        status: 'running',
+        profileId,
+        url: currentProfile?.url || '',
+        pid: process.pid,
+        uptimeSeconds: Math.floor((Date.now() - startupTime) / 1000),
+        windowState: currentWindowState || profileManager.loadWindowState(profileId)
+      }),
+      onShutdown: async () => {
+        console.log(`[ZaloWebView] Nhận lệnh shutdown qua socket cho profile ${profileId}`);
+        if (mainWindow && !mainWindow.isDestroyed()) {
+          mainWindow.close();
+        }
+      }
+    });
+
+    try {
+      await runnerServer.start();
+    } catch (err: unknown) {
+      console.warn('[ZaloWebView] Cảnh báo khởi động socket control:', (err as Error).message);
+    }
   } else {
     console.log('[ZaloWebView] Khởi chạy Manager Dashboard');
     mainWindow = createManagerWindow();
@@ -123,8 +191,21 @@ app.whenReady().then(() => {
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) {
-      if (cliArgs.mode === 'profile' && cliArgs.profileId) {
-        mainWindow = createRunnerWindow(cliArgs.profileId);
+      if (cliArgs.mode === 'profile' && currentProfile) {
+        currentWindowState = profileManager.loadWindowState(currentProfile.id);
+        const permissionManager = new PermissionManager(currentProfile.id);
+        const preloadPath = path.join(__dirname, '../preload/webview-preload.js');
+
+        mainWindow = createRunnerWindow({
+          profile: currentProfile,
+          windowState: currentWindowState,
+          preloadPath,
+          permissionManager,
+          onWindowStateChange: (newState) => {
+            currentWindowState = newState;
+            profileManager.saveWindowState(currentProfile!.id, newState);
+          }
+        });
       } else {
         mainWindow = createManagerWindow();
       }
@@ -133,6 +214,12 @@ app.whenReady().then(() => {
 }).catch((err: Error) => {
   console.error('[ZaloWebView] Lỗi khởi động ứng dụng:', err);
   app.exit(1);
+});
+
+app.on('will-quit', async () => {
+  if (runnerServer) {
+    await runnerServer.stop();
+  }
 });
 
 app.on('window-all-closed', () => {
