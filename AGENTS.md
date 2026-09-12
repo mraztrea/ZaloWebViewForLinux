@@ -1,0 +1,84 @@
+# Agent Guidelines - ZaloWebView
+
+Tài liệu này quy định các nguyên tắc, quy trình làm việc và tiêu chuẩn kỹ thuật bắt buộc dành cho AI agents (Antigravity, Codex, Cursor, etc.) khi phát triển trong dự án **ZaloWebView**.
+
+---
+
+## 1. QUY TẮC BẮT BUỘC: Khởi tạo Git Branch khi tạo Spec mới (Spec-Kit)
+
+> [!IMPORTANT]
+> **MỖI KHI BẮT ĐẦU 1 SPECIFY MỚI BẰNG SPECKIT SKILL (`speckit-specify`), BẮT BUỘC PHẢI KHỞI TẠO VÀ CHUYỂN SANG 1 GIT BRANCH MỚI.**
+> Tuyệt đối không tạo spec hoặc phát triển tính năng trực tiếp trên branch `master`.
+
+### 1.1. Quy tắc đặt tên Branch
+- Định dạng: `<prefix>-<short-name>`
+  - `<prefix>`: Số thứ tự 3 chữ số tăng dần tiếp theo dựa trên các thư mục đã có trong `specs/` (ví dụ: đã có `001-project-init` thì nhánh tiếp theo là `002-<tên-tính-năng>`).
+  - `<short-name>`: 2-4 từ ngắn gọn, dạng kebab-case mô tả tính năng (ví dụ: `002-window-state-mgmt`, `003-xpath-monitor`).
+  - Tên branch phải khớp với tên thư mục feature trong `specs/`.
+
+### 1.2. Quy trình thực hiện chuẩn (Standard Workflow)
+Trước khi gọi `speckit-specify` hoặc tạo file spec:
+1. **Kiểm tra trạng thái repo**: Đảm bảo working tree sạch sẽ (`git status`). Nếu có thay đổi chưa commit, cần xử lý dứt điểm trước.
+2. **Đồng bộ từ nhánh gốc**:
+   ```bash
+   git checkout master
+   git pull origin master
+   ```
+3. **Xác định số thứ tự tiếp theo**:
+   Kiểm tra thư mục `specs/` để lấy số thứ tự lớn nhất hiện tại `+ 1` (định dạng `%03d`, ví dụ `002`).
+4. **Tạo và chuyển sang branch mới**:
+   ```bash
+   git checkout -b <prefix>-<short-name>
+   # Ví dụ: git checkout -b 002-window-state-mgmt
+   ```
+5. **Thực thi `speckit-specify`**:
+   - Tạo thư mục tương ứng `specs/<prefix>-<short-name>/`.
+   - Khởi tạo `spec.md` và cập nhật `.specify/feature.json`:
+     ```json
+     {
+       "feature_directory": "specs/<prefix>-<short-name>"
+     }
+     ```
+6. **Vòng đời phát triển**:
+   Toàn bộ các bước tiếp theo (`speckit-clarify`, `speckit-plan`, `speckit-tasks`, `speckit-implement`, coding, testing) **bắt buộc** diễn ra trên feature branch này cho đến khi được review và merge vào `master`.
+
+---
+
+## 2. Thông tin dự án & Tech Stack
+
+- **Dự án**: ZaloWebView (Linux Webview Manager)
+- **Mục tiêu**: Trình quản lý phiên Webview độc lập chạy trên Linux, hỗ trợ nhiều website/profile với cơ chế theo dõi XPath, phát hiện thông báo và tích hợp shortcut hệ thống (KDE Plasma & GNOME).
+- **Runtime**: Node.js `>= 22.0.0`, Electron `>= 44.3.0`
+- **Ngôn ngữ**: TypeScript (Strict mode)
+- **Công cụ build**: `esbuild` (`scripts/build.mjs`)
+- **Testing**: `vitest`
+
+---
+
+## 3. Lệnh vận hành thường dùng (CLI Commands)
+
+| Tác vụ | Lệnh | Ghi chú |
+|---|---|---|
+| Cài đặt dependencies | `npm install` | |
+| Kiểm tra kiểu TypeScript | `npm run typecheck` | `tsc --noEmit` |
+| Biên dịch dự án | `npm run build` | Multi-target esbuild |
+| Chạy unit/integration test | `npm test` | Vitest run |
+| Khởi chạy Manager Dashboard | `./bin/zaloview.js --manager` | Giao diện quản lý chính |
+| Khởi chạy Runner theo Profile | `./bin/zaloview.js --profile <id>` | Runner cho profile cụ thể |
+
+---
+
+## 4. Tiêu chuẩn viết code & Kiến trúc
+
+1. **Spec-Driven Development**:
+   - Mọi thay đổi lớn hoặc tính năng mới phải có spec, checklist, plan và tasks trong `specs/<feature-dir>/`.
+   - Không tự ý code tính năng mới khi chưa hoàn thành đặc tả và lập kế hoạch.
+2. **Nguyên tắc Tối giản (YAGNI & Simplicity)**:
+   - Viết giải pháp đơn giản nhất đáp ứng đầy đủ yêu cầu.
+   - Ưu tiên sử dụng API có sẵn của Node.js/Electron trước khi cài đặt thêm thư viện thứ 3.
+   - Không tạo abstraction, factory, wrapper trừ khi thực sự cần thiết.
+3. **Chất lượng & Kiểm chứng (Verification)**:
+   - Luôn chạy `npm run typecheck` và `npm test` trước khi hoàn tất bất kỳ task nào.
+   - Đảm bảo mã nguồn biên dịch sạch không có lỗi kiểu (type error) hay cảnh báo nghiêm trọng.
+4. **Bảo toàn tài liệu**:
+   - Giữ nguyên các comment giải thích nghiệp vụ và tài liệu kỹ thuật trong thư mục `docs/`.
