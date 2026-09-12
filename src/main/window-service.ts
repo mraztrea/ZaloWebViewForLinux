@@ -1,0 +1,173 @@
+import { BrowserWindow, BrowserWindowConstructorOptions, screen, shell } from 'electron';
+import { Profile, WindowState } from '../shared/types';
+import { clampWindowBounds } from './screen-utils';
+import { PermissionManager } from './permission-manager';
+
+export interface CreateRunnerWindowOptions {
+  profile: Profile;
+  windowState: WindowState;
+  preloadPath: string;
+  permissionManager?: PermissionManager;
+  onWindowStateChange?: (newState: WindowState) => void;
+}
+
+export function getPartitionForProfile(profileId: string): string {
+  return `persist:zaloview_${profileId}`;
+}
+
+export function buildRunnerWindowOptions(
+  profile: Profile,
+  windowState: WindowState,
+  preloadPath: string
+): BrowserWindowConstructorOptions {
+  return {
+    width: windowState.width,
+    height: windowState.height,
+    x: windowState.x,
+    y: windowState.y,
+    title: profile.name,
+    autoHideMenuBar: true,
+    show: false, // Show after ready-to-show to prevent visual flicker
+    webPreferences: {
+      contextIsolation: true,
+      nodeIntegration: false,
+      sandbox: true,
+      webSecurity: true,
+      partition: getPartitionForProfile(profile.id),
+      preload: preloadPath
+    }
+  };
+}
+
+export function createRunnerWindow(options: CreateRunnerWindowOptions): BrowserWindow {
+  const { profile, windowState, preloadPath, permissionManager, onWindowStateChange } = options;
+
+  let currentNormalBounds = {
+    x: windowState.x,
+    y: windowState.y,
+    width: windowState.width,
+    height: windowState.height
+  };
+
+  // Clamp bounds against available displays
+  try {
+    const displays = screen.getAllDisplays();
+    const primary = screen.getPrimaryDisplay();
+    const clamped = clampWindowBounds(currentNormalBounds, displays, primary);
+    currentNormalBounds = {
+      x: clamped.x,
+      y: clamped.y,
+      width: clamped.width,
+      height: clamped.height
+    };
+  } catch {
+    // Screen API may not be ready in some headless test environments
+  }
+
+  const winOptions = buildRunnerWindowOptions(
+    profile,
+    { ...currentNormalBounds, isMaximized: windowState.isMaximized },
+    preloadPath
+  );
+
+  const win = new BrowserWindow(winOptions);
+
+  if (windowState.isMaximized) {
+    win.maximize();
+  }
+
+  // Debounced window state updater
+  let saveTimer: NodeJS.Timeout | null = null;
+  const notifyStateChange = () => {
+    if (!onWindowStateChange) return;
+
+    const isMax = win.isMaximized();
+    if (!isMax) {
+      const bounds = win.getNormalBounds ? win.getNormalBounds() : win.getBounds();
+      currentNormalBounds = {
+        x: bounds.x,
+        y: bounds.y,
+        width: bounds.width,
+        height: bounds.height
+      };
+    }
+
+    onWindowStateChange({
+      ...currentNormalBounds,
+      isMaximized: isMax
+    });
+  };
+
+  const scheduleSave = () => {
+    if (saveTimer) clearTimeout(saveTimer);
+    saveTimer = setTimeout(notifyStateChange, 300);
+  };
+
+  win.on('resize', scheduleSave);
+  win.on('move', scheduleSave);
+  win.on('close', () => {
+    if (saveTimer) clearTimeout(saveTimer);
+    notifyStateChange();
+  });
+
+  // Session Security & Permissions
+  const ses = win.webContents.session;
+
+  if (permissionManager) {
+    ses.setPermissionCheckHandler((_webContents, permission, requestingOrigin) => {
+      return permissionManager.isPermissionGranted(requestingOrigin, permission);
+    });
+
+    ses.setPermissionRequestHandler((_webContents, permission, callback, details) => {
+      const origin = details.requestingUrl ? new URL(details.requestingUrl).origin : '';
+      if (permission === 'media') {
+        // Media (mic/cam) permission handling
+        const granted = permissionManager.isPermissionGranted(origin, permission);
+        callback(granted);
+        return;
+      }
+      // Default deny for unhandled permissions
+      callback(false);
+    });
+  }
+
+  // Navigation safeguard: restrict navigation within profile origin
+  let profileOrigin = '';
+  try {
+    profileOrigin = new URL(profile.url).origin;
+  } catch {
+    // ignore
+  }
+
+  win.webContents.on('will-navigate', (event, targetUrl) => {
+    try {
+      const targetOrigin = new URL(targetUrl).origin;
+      if (profileOrigin && targetOrigin !== profileOrigin) {
+        event.preventDefault();
+        shell.openExternal(targetUrl).catch((err: Error) => {
+          console.error('[ZaloWebView] Không thể mở URL ngoại vi:', err);
+        });
+      }
+    } catch {
+      event.preventDefault();
+    }
+  });
+
+  // Popups / window.open safeguard: open externally
+  win.webContents.setWindowOpenHandler((details) => {
+    shell.openExternal(details.url).catch((err: Error) => {
+      console.error('[ZaloWebView] Lỗi mở liên kết ngoài:', err);
+    });
+    return { action: 'deny' };
+  });
+
+  win.once('ready-to-show', () => {
+    win.show();
+  });
+
+  win.loadURL(profile.url).catch((err: Error) => {
+    console.error(`[ZaloWebView] Lỗi nạp URL profile "${profile.id}":`, err.message);
+  });
+
+  return win;
+}
