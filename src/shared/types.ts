@@ -114,6 +114,10 @@ export interface DesktopIntegrationConfig {
   createDesktopShortcut: boolean;
 }
 
+export type ShortcutSyncResult =
+  | { status: 'created' | 'updated' | 'removed' | 'unchanged'; path: string }
+  | { status: 'error'; path: string; message: string };
+
 export interface Profile {
   id: string; // immutable, slug regex, max 64 chars
   name: string; // non-empty, max 120 chars
