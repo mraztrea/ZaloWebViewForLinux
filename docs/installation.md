@@ -69,3 +69,21 @@ Các kiểm tra tự động đã chạy trên checkout này:
 | GNOME | Wayland | Chưa kiểm thử | Chưa kiểm thử | Chưa kiểm thử | Chưa kiểm thử | Chưa đo `app_id` | Chưa kiểm thử | Chưa kiểm thử | `gnome-shell` không hiện diện. |
 
 Khi có desktop session tương ứng, nghiệm thu từng dòng bằng entry sinh thật và bundle đã cài: chạy `desktop-file-validate`, `gio launch`, xác nhận PID/socket/window đúng profile, mở lặp, icon và thao tác pin/unpin qua UI desktop. Trên X11 dùng `xprop` để đo `WM_CLASS`; trên Wayland dùng inspector/debug trace của compositor để đo `app_id`.
+
+## Manager và launcherPath (Phase 5)
+
+Mở Manager (bảng điều khiển GUI) từ bundle đã cài:
+
+```bash
+"$HOME/.local/opt/zaloview/zaloview" --manager
+```
+
+Khi chạy dev từ source:
+
+```bash
+./bin/zaloview.js --manager
+```
+
+`launcherPath` mặc định Manager dùng khi đồng bộ shortcut là `$HOME/.local/opt/zaloview/zaloview` (đường tuyệt đối tới binary đã cài, xem mục Bundle launcher ở trên). Nếu cài ở đường khác, shortcut sinh ra sẽ trỏ sai — cần giữ đúng đường cài ổn định này.
+
+Fallback CLI khi tray không hiện: mọi thao tác Manager đều có lệnh tương đương `zaloview --profile <id>` để mở/khôi phục runner; trạng thái runner kiểm tra qua socket profile (`$XDG_RUNTIME_DIR/zaloview/<id>.sock`, fallback thư mục session). Đóng Manager không đóng runner; mở lặp cùng profile chỉ restore cửa sổ hiện có (single-instance lock theo từng profile).

@@ -1,4 +1,4 @@
-import { app, BrowserWindow, Notification, ipcMain } from 'electron';
+import { app, BrowserWindow, Notification, dialog, ipcMain } from 'electron';
 import { spawn } from 'node:child_process';
 import * as path from 'node:path';
 import * as fs from 'node:fs';
@@ -10,6 +10,7 @@ import { canCloseToTray, createRunnerWindow, restoreRunnerWindow } from './windo
 import { PermissionManager } from './permission-manager';
 import { RunnerControlServer } from './runner-control';
 import { AttentionController, isValidXPathObservationState } from './notifier';
+import { ManagerService, registerManagerHandlers, resolveLauncherPath } from './manager-handlers';
 import { TrayManager } from './tray-manager';
 import {
   DEFAULT_ZALO_UNREAD_BADGE_XPATH,
@@ -173,8 +174,7 @@ app.on('second-instance', () => {
 });
 
 function createManagerWindow(): BrowserWindow {
-  const win = new BrowserWindow({
-    width: 900,
+  const win = new BrowserWindow({    width: 900,
     height: 650,
     title: 'ZaloWebView Manager',
     autoHideMenuBar: true,
@@ -182,7 +182,7 @@ function createManagerWindow(): BrowserWindow {
       contextIsolation: true,
       nodeIntegration: false,
       sandbox: true,
-      preload: path.join(__dirname, '../preload/webview-preload.js')
+      preload: path.join(__dirname, '../preload/manager-preload.js')
     }
   });
 
@@ -197,6 +197,46 @@ function createManagerWindow(): BrowserWindow {
 function restoreMainWindow(): void {
   if (!mainWindow || mainWindow.isDestroyed()) return;
   restoreRunnerWindow(mainWindow);
+}
+
+let managerHandlersRegistered = false;
+
+function setupManagerHandlers(): void {
+  if (managerHandlersRegistered) return;
+  managerHandlersRegistered = true;
+  const service = new ManagerService({
+    appPath: app.getAppPath(),
+    isPackaged: app.isPackaged,
+    execPath: process.execPath,
+    launcherPath: resolveLauncherPath(),
+    confirmAction: async (message, detail) => {
+      const result = await dialog.showMessageBox({
+        type: 'warning',
+        message,
+        detail,
+        buttons: ['Xóa', 'Hủy'],
+        defaultId: 1,
+        cancelId: 1
+      });
+      return result.response === 0;
+    },
+    showOpenDialog: async () => {
+      const result = await dialog.showOpenDialog({
+        properties: ['openFile'],
+        filters: [{ name: 'Ảnh', extensions: ['png', 'jpg', 'jpeg', 'webp'] }]
+      });
+      if (result.canceled) return null;
+      return result.filePaths[0] ?? null;
+    }
+  });
+  registerManagerHandlers(
+    ipcMain,
+    () => {
+      if (!mainWindow || mainWindow.isDestroyed()) return null;
+      return { webContents: { mainFrame: mainWindow.webContents.mainFrame } };
+    },
+    service
+  );
 }
 
 function getNotificationBody(state: XPathObservationState): string {
@@ -511,6 +551,7 @@ app.whenReady().then(async () => {
   } else {
     console.log('[ZaloWebView] Khởi chạy Manager Dashboard');
     mainWindow = createManagerWindow();
+    setupManagerHandlers();
   }
 
   app.on('activate', () => {

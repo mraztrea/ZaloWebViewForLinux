@@ -118,6 +118,24 @@ export type ShortcutSyncResult =
   | { status: 'created' | 'updated' | 'removed' | 'unchanged'; path: string }
   | { status: 'error'; path: string; message: string };
 
+/**
+ * Manager contracts (Phase 5). Thêm sau đối chiếu schema theo spec phase 5.
+ */
+export interface ManagerSaveResult {
+  profile: Profile;
+  shortcut: ShortcutSyncResult;
+  /** true khi runner đang dùng bản cấu hình cũ; null khi không lấy được revision. */
+  restartRequired: boolean | null;
+}
+
+export type ManagerRunnerState = 'running' | 'stopped' | 'unknown';
+
+export interface ManagerRunnerStatus {
+  state: ManagerRunnerState;
+  /** Kèm theo khi liên lạc được với runner. */
+  data?: RunnerStatusData;
+}
+
 export interface Profile {
   id: string; // immutable, slug regex, max 64 chars
   name: string; // non-empty, max 120 chars

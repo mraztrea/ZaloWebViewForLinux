@@ -15,17 +15,78 @@
         <span class="header-subtitle">Quản lý phiên Webview độc lập trên Linux</span>
       </div>
       <div class="header-actions">
+        <input id="search-input" class="search-input" type="search" placeholder="Tìm theo tên hoặc địa chỉ…" aria-label="Tìm profile">
         <button id="btn-add-profile" class="btn btn-primary" type="button">+ Thêm Profile</button>
       </div>
     </header>
 
     <main class="app-main">
-      <div id="profile-list" class="profile-grid">
-        <div class="empty-state">
-          <p>Hệ thống khởi tạo thành công. Chưa có profile nào được thiết lập.</p>
-        </div>
-      </div>
+      <div id="status-bar" class="status-bar" role="status" aria-live="polite"></div>
+      <div id="profile-list" class="profile-grid"></div>
     </main>
+
+    <dialog id="profile-dialog" class="profile-dialog" aria-labelledby="dialog-title">
+      <form id="profile-form" method="dialog">
+        <h2 id="dialog-title">Thêm Profile</h2>
+        <p id="form-error" class="form-error" role="alert" hidden></p>
+        <input id="field-id" type="hidden">
+        <label class="field">
+          <span>Tên</span>
+          <input id="field-name" type="text" maxlength="120" required autocomplete="off">
+        </label>
+        <label class="field">
+          <span>Địa chỉ website</span>
+          <input id="field-url" type="url" required autocomplete="off" placeholder="https://…">
+        </label>
+        <label class="field">
+          <span>Đường dẫn biểu tượng (tùy chọn)</span>
+          <input id="field-icon" type="text" autocomplete="off">
+        </label>
+        <div class="icon-actions">
+          <button id="btn-choose-icon" class="btn btn-small" type="button">Chọn file…</button>
+          <button id="btn-fetch-icon" class="btn btn-small" type="button">Tải từ website</button>
+        </div>
+        <p id="icon-status" class="icon-status" role="status" aria-live="polite" hidden></p>
+        <label class="field">
+          <span>User-Agent (chỉ đặt khi tạo mới)</span>
+          <input id="field-useragent" type="text" autocomplete="off">
+        </label>
+        <fieldset class="fieldset">
+          <legend>Theo dõi XPath</legend>
+          <label class="field">
+            <span>Selector (trống = tắt theo dõi)</span>
+            <input id="field-xpath" type="text" autocomplete="off">
+          </label>
+          <label class="field">
+            <span>Chế độ</span>
+            <select id="field-mode">
+              <option value="badge_count">Đếm badge</option>
+              <option value="text_content">Nội dung văn bản</option>
+              <option value="existence">Tồn tại phần tử</option>
+            </select>
+          </label>
+          <label class="field">
+            <span>Chu kỳ quét (ms, 1000–60000)</span>
+            <input id="field-interval" type="number" min="1000" max="60000" step="1000" value="3000">
+          </label>
+        </fieldset>
+        <fieldset class="fieldset">
+          <legend>Tích hợp desktop</legend>
+          <label class="check"><input id="check-flash" type="checkbox" checked> <span>Nhấp nháy taskbar khi có tin mới</span></label>
+          <label class="check"><input id="check-badge" type="checkbox" checked> <span>Hiện số tin trên taskbar</span></label>
+          <label class="check"><input id="check-tray" type="checkbox"> <span>Thu nhỏ vào khay hệ thống</span></label>
+          <label class="check"><input id="check-notify" type="checkbox" checked> <span>Thông báo desktop</span></label>
+          <label class="check"><input id="check-shortcut" type="checkbox" checked> <span>Tạo shortcut menu ứng dụng</span></label>
+        </fieldset>
+        <div id="xpath-result" class="xpath-result" role="status" aria-live="polite" hidden></div>
+        <div class="dialog-actions">
+          <button id="btn-test-xpath" class="btn" type="button">Thử XPath</button>
+          <span class="spacer"></span>
+          <button id="btn-cancel" class="btn" type="button">Hủy</button>
+          <button id="btn-save" class="btn btn-primary" type="submit">Lưu</button>
+        </div>
+      </form>
+    </dialog>
 
     <footer class="app-footer">
       <span class="status-indicator">● Hệ thống sẵn sàng</span>

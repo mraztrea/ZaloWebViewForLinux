@@ -46,6 +46,20 @@ async function buildAll() {
       logLevel: 'info'
     });
 
+    // 2b. Build Manager Preload Script (Sandbox Safe, narrow bridge)
+    console.log('[build] Compiling Manager Preload Script...');
+    await esbuild.build({
+      entryPoints: [path.join(rootDir, 'src/preload/manager-preload.ts')],
+      outfile: path.join(distDir, 'preload/manager-preload.js'),
+      platform: 'node',
+      format: 'cjs',
+      target: 'node22',
+      bundle: true,
+      external: ['electron'],
+      sourcemap: true,
+      logLevel: 'info'
+    });
+
     // 3. Build Renderer Application (Browser Isolated)
     console.log('[build] Compiling Renderer Application...');
     await esbuild.build({

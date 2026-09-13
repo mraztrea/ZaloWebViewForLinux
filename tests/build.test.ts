@@ -8,6 +8,7 @@ describe('User Story 3: Build Pipeline and Sandbox Security Verification', () =>
 
   const mainDist = path.join(distDir, 'main/index.js');
   const preloadDist = path.join(distDir, 'preload/webview-preload.js');
+  const managerPreloadDist = path.join(distDir, 'preload/manager-preload.js');
   const rendererDist = path.join(distDir, 'renderer/manager/app.js');
   const htmlDist = path.join(distDir, 'renderer/manager/index.html');
   const cssDist = path.join(distDir, 'renderer/manager/styles.css');
@@ -16,6 +17,7 @@ describe('User Story 3: Build Pipeline and Sandbox Security Verification', () =>
   it('should have all compiled artifacts and static assets in dist/', () => {
     expect(fs.existsSync(mainDist)).toBe(true);
     expect(fs.existsSync(preloadDist)).toBe(true);
+    expect(fs.existsSync(managerPreloadDist)).toBe(true);
     expect(fs.existsSync(rendererDist)).toBe(true);
     expect(fs.existsSync(htmlDist)).toBe(true);
     expect(fs.existsSync(cssDist)).toBe(true);
@@ -50,5 +52,29 @@ describe('User Story 3: Build Pipeline and Sandbox Security Verification', () =>
     const htmlContent = fs.readFileSync(htmlDist, 'utf-8');
     expect(htmlContent).toMatch(/http-equiv=["']Content-Security-Policy["']/i);
     expect(htmlContent).toMatch(/default-src 'self'/);
+  });
+
+  it('should bundle manager preload with narrow bridge only', () => {
+    const content = fs.readFileSync(managerPreloadDist, 'utf-8');
+
+    // Manager preload must expose window.zaloview with per-API channels
+    expect(content).toMatch(/zaloview:get-profiles/);
+    expect(content).toMatch(/zaloview:save-profile/);
+    expect(content).toMatch(/zaloview:delete-profile-session/);
+    expect(content).toMatch(/require\(['"]electron['"]\)/);
+    // No generic invoke bridge, no ipcRenderer leak, no relative requires
+    expect(content).not.toMatch(/exposeInMainWorld\(['"]zaloview['"],\s*ipcRenderer/);
+    expect(content).not.toMatch(/require\(['"]\.\.?\//);
+  });
+
+  it('should not expose manager bridge on website preload', () => {
+    const content = fs.readFileSync(preloadDist, 'utf-8');
+    expect(content).not.toMatch(/zaloview:get-profiles/);
+    expect(content).not.toMatch(/zaloview:save-profile/);
+  });
+
+  it('should wire manager window to manager preload in main bundle', () => {
+    const content = fs.readFileSync(mainDist, 'utf-8');
+    expect(content).toMatch(/manager-preload\.js/);
   });
 });
