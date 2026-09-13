@@ -19,7 +19,7 @@ description: "Danh sách task triển khai shortcut desktop theo profile"
 
 **Mục đích**: Bổ sung entry point đóng gói mà không thay đổi `npm run build` hiện có.
 
-- [ ] T001 [P] Thêm script `package:linux` vào `package.json`, gọi `node scripts/package-linux.mjs`, giữ nguyên các script `build`, `typecheck`, `test`, `prestart` và `start` hiện có.
+- [X] T001 [P] Thêm script `package:linux` vào `package.json`, gọi `node scripts/package-linux.mjs`, giữ nguyên các script `build`, `typecheck`, `test`, `prestart` và `start` hiện có.
 
 ---
 
@@ -29,7 +29,7 @@ description: "Danh sách task triển khai shortcut desktop theo profile"
 
 **⚠️ CRITICAL**: Không bắt đầu service hoặc test story trước khi phase này hoàn tất.
 
-- [ ] T002 Bổ sung `ShortcutSyncResult` vào `src/shared/types.ts` đúng union `{ status: 'created' | 'updated' | 'removed' | 'unchanged'; path: string } | { status: 'error'; path: string; message: string }`, không thay đổi `Profile`, `DesktopIntegrationConfig` hoặc hành vi type hiện có.
+- [X] T002 Bổ sung `ShortcutSyncResult` vào `src/shared/types.ts` đúng union `{ status: 'created' | 'updated' | 'removed' | 'unchanged'; path: string } | { status: 'error'; path: string; message: string }`, không thay đổi `Profile`, `DesktopIntegrationConfig` hoặc hành vi type hiện có.
 
 **Checkpoint**: Kiểu kết quả shortcut biên dịch được và các story có thể dùng chung contract.
 
@@ -45,15 +45,15 @@ description: "Danh sách task triển khai shortcut desktop theo profile"
 
 > Viết test trước implementation và chạy để xác nhận FAIL.
 
-- [ ] T003 [P] [US1] Viết test thất bại trong `tests/desktop-service.test.ts` cho XDG `XDG_DATA_HOME` tuyệt đối/rỗng/tương đối, profile ID slug hợp lệ, tên tiếng Việt, filename `zaloview-<id>.desktop`, marker ownership và bộ key Desktop Entry cố định.
-- [ ] T004 [P] [US1] Viết test thất bại trong `tests/package-linux.test.ts` cho `npm run package:linux` hoặc `scripts/package-linux.mjs --output "$TMP_DIR"`: bundle có `resources/app/package.json`, `resources/app/dist/main/index.js`, binary launcher executable, locales/runtime cần thiết và không yêu cầu Node/npm sau khi cài.
+- [X] T003 [P] [US1] Viết test thất bại trong `tests/desktop-service.test.ts` cho XDG `XDG_DATA_HOME` tuyệt đối/rỗng/tương đối, profile ID slug hợp lệ, tên tiếng Việt, filename `zaloview-<id>.desktop`, marker ownership và bộ key Desktop Entry cố định.
+- [X] T004 [P] [US1] Viết test thất bại trong `tests/package-linux.test.ts` cho `npm run package:linux` hoặc `scripts/package-linux.mjs --output "$TMP_DIR"`: bundle có `resources/app/package.json`, `resources/app/dist/main/index.js`, binary launcher executable, locales/runtime cần thiết và không yêu cầu Node/npm sau khi cài.
 
 ### Implementation cho User Story 1
 
-- [ ] T005 [US1] Tạo `src/main/desktop-service.ts` với validation trước filesystem và serializer thuần: dùng `validateProfileId`, suy ra applications dir từ `resolveDataDir`, tạo `zaloview-<id>.desktop`, kiểm tra `Name` tối đa 120 ký tự không control character, launcher absolute regular executable, icon managed absolute hoặc `applications-internet`, đồng thời encode Desktop Entry string và từng `Exec` argv riêng không qua shell.
-- [ ] T006 [US1] Hoàn thiện `syncProfileShortcut(profile, launcherPath)` trong `src/main/desktop-service.ts`: `createDesktopShortcut=true` sinh nội dung UTF-8 cố định gồm `Version=1.5`, `Type=Application`, `Name`, `Exec`, `Icon`, `Terminal=false`, `Categories=Network;`, `StartupWMClass`, `X-ZaloWebView-ProfileId`; dùng `atomicWriteFile(path, content, 0o644)` và trả `created`, `updated` hoặc `unchanged` theo bytes/ownership.
-- [ ] T007 [P] [US1] Tạo `scripts/package-linux.mjs` dùng Node standard library: chạy build, sao chép toàn bộ Electron distribution theo `process.arch` vào `build/zaloview-linux-${process.arch}` hoặc thư mục `--output`, đổi binary `electron` thành `zaloview`, chép app vào `resources/app`, giữ sandbox/locales và thoát khác 0 nếu runtime/app thiếu; không thêm `--no-sandbox` hay dependency mới.
-- [ ] T008 [US1] Chạy targeted tests và smoke bundle từ `tests/desktop-service.test.ts`, `tests/package-linux.test.ts`, `specs/005-desktop-shortcuts/contracts/desktop-shortcut.md` và `specs/005-desktop-shortcuts/contracts/installed-launcher.md`; xác nhận `Exec` mở đúng profile từ cwd ngoài repository, đường có khoảng trắng và PATH tối thiểu.
+- [X] T005 [US1] Tạo `src/main/desktop-service.ts` với validation trước filesystem và serializer thuần: dùng `validateProfileId`, suy ra applications dir từ `resolveDataDir`, tạo `zaloview-<id>.desktop`, kiểm tra `Name` tối đa 120 ký tự không control character, launcher absolute regular executable, icon managed absolute hoặc `applications-internet`, đồng thời encode Desktop Entry string và từng `Exec` argv riêng không qua shell.
+- [X] T006 [US1] Hoàn thiện `syncProfileShortcut(profile, launcherPath)` trong `src/main/desktop-service.ts`: `createDesktopShortcut=true` sinh nội dung UTF-8 cố định gồm `Version=1.5`, `Type=Application`, `Name`, `Exec`, `Icon`, `Terminal=false`, `Categories=Network;`, `StartupWMClass`, `X-ZaloWebView-ProfileId`; dùng `atomicWriteFile(path, content, 0o644)` và trả `created`, `updated` hoặc `unchanged` theo bytes/ownership.
+- [X] T007 [P] [US1] Tạo `scripts/package-linux.mjs` dùng Node standard library: chạy build, sao chép toàn bộ Electron distribution theo `process.arch` vào `build/zaloview-linux-${process.arch}` hoặc thư mục `--output`, đổi binary `electron` thành `zaloview`, chép app vào `resources/app`, giữ sandbox/locales và thoát khác 0 nếu runtime/app thiếu; không thêm `--no-sandbox` hay dependency mới.
+- [X] T008 [US1] Chạy targeted tests và smoke bundle từ `tests/desktop-service.test.ts`, `tests/package-linux.test.ts`, `specs/005-desktop-shortcuts/contracts/desktop-shortcut.md` và `specs/005-desktop-shortcuts/contracts/installed-launcher.md`; xác nhận `Exec` mở đúng profile từ cwd ngoài repository, đường có khoảng trắng và PATH tối thiểu.
 
 **Checkpoint**: User Story 1 độc lập hoạt động; có bundle launcher và entry mở đúng profile, nhưng chưa cần GUI Manager.
 
@@ -71,12 +71,12 @@ description: "Danh sách task triển khai shortcut desktop theo profile"
 
 > Viết test trước phần lifecycle implementation và chạy để xác nhận FAIL.
 
-- [ ] T009 [US2] Bổ sung test trong `tests/desktop-service.test.ts` cho chuỗi lifecycle, file marker sai, symlink, collision unowned, ID traversal, file profile khác, icon thiếu và quyền entry `0644` trong khi registry fixture vẫn `0600`.
+- [X] T009 [US2] Bổ sung test trong `tests/desktop-service.test.ts` cho chuỗi lifecycle, file marker sai, symlink, collision unowned, ID traversal, file profile khác, icon thiếu và quyền entry `0644` trong khi registry fixture vẫn `0600`.
 
 ### Implementation cho User Story 2
 
-- [ ] T010 [US2] Hoàn thiện `removeProfileShortcut(profileId)` và nhánh disable trong `src/main/desktop-service.ts`: validate ID trước path, dùng `lstat`, chỉ remove regular file có marker khớp, file không tồn tại trả `unchanged`, symlink/unowned/collision trả `error`, không xóa session/icon gốc/file profile khác.
-- [ ] T011 [US2] Chạy `npm test -- tests/desktop-service.test.ts tests/atomic-writer.test.ts tests/profile-storage.test.ts` và kiểm tra bằng `stat`/fixture rằng cập nhật rename giữ file cũ khi lỗi, thao tác tắt hai lần idempotent, writer registry vẫn mặc định `0600` và service không gọi `update-desktop-database`.
+- [X] T010 [US2] Hoàn thiện `removeProfileShortcut(profileId)` và nhánh disable trong `src/main/desktop-service.ts`: validate ID trước path, dùng `lstat`, chỉ remove regular file có marker khớp, file không tồn tại trả `unchanged`, symlink/unowned/collision trả `error`, không xóa session/icon gốc/file profile khác.
+- [X] T011 [US2] Chạy `npm test -- tests/desktop-service.test.ts tests/atomic-writer.test.ts tests/profile-storage.test.ts` và kiểm tra bằng `stat`/fixture rằng cập nhật rename giữ file cũ khi lỗi, thao tác tắt hai lần idempotent, writer registry vẫn mặc định `0600` và service không gọi `update-desktop-database`.
 
 **Checkpoint**: User Stories 1 và 2 cùng hoạt động; shortcut phản ánh cấu hình hiện tại và không phá dữ liệu ngoài mục tiêu.
 
@@ -92,12 +92,12 @@ description: "Danh sách task triển khai shortcut desktop theo profile"
 
 ### Test cho User Story 3
 
-- [ ] T012 [US3] Viết test thất bại trong `tests/desktop-service.test.ts` cho lỗi `atomicWriteFile`, lỗi rename, launcher thiếu/non-executable, icon ngoài vùng managed, kết quả lưu profile tách khỏi `ShortcutSyncResult`, retry không tạo profile trùng và file shortcut cũ không bị thay đổi.
+- [X] T012 [US3] Viết test thất bại trong `tests/desktop-service.test.ts` cho lỗi `atomicWriteFile`, lỗi rename, launcher thiếu/non-executable, icon ngoài vùng managed, kết quả lưu profile tách khỏi `ShortcutSyncResult`, retry không tạo profile trùng và file shortcut cũ không bị thay đổi.
 
 ### Implementation cho User Story 3
 
-- [ ] T013 [US3] Hoàn thiện mapping lỗi trong `src/main/desktop-service.ts`: validation reject trước thao tác ghi, I/O/collision/ownership trả `{ status: 'error', path, message }`, không rollback registry, không tạo file tạm còn sót và không phụ thuộc `update-desktop-database`.
-- [ ] T014 [US3] Chạy fault-injection và retry suite tại `tests/desktop-service.test.ts`, `tests/atomic-writer.test.ts`, `tests/profile-storage.test.ts`; xác nhận mọi ca lỗi giữ entry/registry trước đó đọc được và lần retry trả trạng thái lifecycle đúng.
+- [X] T013 [US3] Hoàn thiện mapping lỗi trong `src/main/desktop-service.ts`: validation reject trước thao tác ghi, I/O/collision/ownership trả `{ status: 'error', path, message }`, không rollback registry, không tạo file tạm còn sót và không phụ thuộc `update-desktop-database`.
+- [X] T014 [US3] Chạy fault-injection và retry suite tại `tests/desktop-service.test.ts`, `tests/atomic-writer.test.ts`, `tests/profile-storage.test.ts`; xác nhận mọi ca lỗi giữ entry/registry trước đó đọc được và lần retry trả trạng thái lifecycle đúng.
 
 **Checkpoint**: Lỗi tích hợp desktop được hiển thị riêng, dữ liệu profile không mất và có đường retry an toàn cho Phase 5.
 
@@ -113,8 +113,8 @@ description: "Danh sách task triển khai shortcut desktop theo profile"
 
 ### Test và tài liệu cho User Story 4
 
-- [ ] T015 [P] [US4] Tạo `docs/installation.md` ghi vị trí bundle cấp người dùng ổn định, đường `launcherPath` tuyệt đối, cách cài/cập nhật/gỡ, quyền executable, yêu cầu kiến trúc, giới hạn sandbox và việc không cần Node/npm/devDependencies sau cài.
-- [ ] T016 [US4] Chạy nghiệm thu thực theo `specs/005-desktop-shortcuts/quickstart.md` và cập nhật ma trận bằng chứng trong `docs/installation.md`: `desktop-file-validate` khi có; X11 đo `WM_CLASS` bằng `xprop`; Wayland đo `app_id`; menu, launch, PID/socket/window, icon, pin/unpin ghi riêng; không suy `StartupWMClass` sang Wayland.
+- [X] T015 [P] [US4] Tạo `docs/installation.md` ghi vị trí bundle cấp người dùng ổn định, đường `launcherPath` tuyệt đối, cách cài/cập nhật/gỡ, quyền executable, yêu cầu kiến trúc, giới hạn sandbox và việc không cần Node/npm/devDependencies sau cài.
+- [X] T016 [US4] Chạy nghiệm thu thực theo `specs/005-desktop-shortcuts/quickstart.md` và cập nhật ma trận bằng chứng trong `docs/installation.md`: `desktop-file-validate` khi có; X11 đo `WM_CLASS` bằng `xprop`; Wayland đo `app_id`; menu, launch, PID/socket/window, icon, pin/unpin ghi riêng; không suy `StartupWMClass` sang Wayland.
 
 **Checkpoint**: Có hướng dẫn cài và kết quả/giới hạn thực tế cho từng môi trường đã kiểm tra, không tuyên bố hỗ trợ chéo khi thiếu bằng chứng.
 
@@ -124,9 +124,9 @@ description: "Danh sách task triển khai shortcut desktop theo profile"
 
 **Mục đích**: Kiểm tra toàn repo và chuẩn bị bàn giao Phase 4.
 
-- [ ] T017 Chạy `npm run typecheck`, `npm test`, `npm run build` và targeted suite của `specs/005-desktop-shortcuts/quickstart.md`; sửa chỉ các lỗi thuộc Phase 4 và giữ test hiện có `107/107` không hồi quy.
-- [ ] T018 Đối chiếu toàn bộ `specs/005-desktop-shortcuts/spec.md` với `plan.md`, `data-model.md`, `contracts/` và `quickstart.md`; cập nhật `specs/005-desktop-shortcuts/checklists/requirements.md` cùng ghi chú bằng chứng, không thêm scope GUI/Phase 5.
-- [ ] T019 Trước commit, chạy `node .gitnexus/run.cjs detect-changes --scope all --repo .` và ghi kết quả đầy đủ (không `partial`/`truncated`) vào `specs/005-desktop-shortcuts/plan.md`; nếu có risk ngoài dự kiến, dừng để rà soát impact thay vì bỏ qua.
+- [X] T017 Chạy `npm run typecheck`, `npm test`, `npm run build` và targeted suite của `specs/005-desktop-shortcuts/quickstart.md`; sửa chỉ các lỗi thuộc Phase 4 và giữ test hiện có `107/107` không hồi quy.
+- [X] T018 Đối chiếu toàn bộ `specs/005-desktop-shortcuts/spec.md` với `plan.md`, `data-model.md`, `contracts/` và `quickstart.md`; cập nhật `specs/005-desktop-shortcuts/checklists/requirements.md` cùng ghi chú bằng chứng, không thêm scope GUI/Phase 5.
+- [X] T019 Trước commit, chạy `node .gitnexus/run.cjs detect-changes --scope all --repo .` và ghi kết quả đầy đủ (không `partial`/`truncated`) vào `specs/005-desktop-shortcuts/plan.md`; nếu có risk ngoài dự kiến, dừng để rà soát impact thay vì bỏ qua.
 
 ---
 

@@ -36,3 +36,5 @@
 - Đã đối chiếu vòng 1 ngày 2026-09-13 với `docs/phases/phase-4-shortcuts/spec.md`, `docs/phases/phase-4-shortcuts/plan.md`, `docs/phased_implementation_plan.md`, `docs/design_specification.md`, `docs/detailed_tasks_plan.md` và `docs/code_remediation_guide.md`.
 - Không cần câu hỏi làm rõ: phạm vi, ranh giới Phase 5, hành vi lỗi từng phần và ma trận nghiệm thu đã có mặc định hợp lý trong tài liệu dự án.
 - Checklist đạt 16/16 mục ở vòng xác nhận đầu tiên.
+- Đã đối chiếu lại sau triển khai với `spec.md`, `plan.md`, `data-model.md`, `contracts/` và `quickstart.md`; phạm vi vẫn giới hạn ở service shortcut, launcher bundle và bằng chứng môi trường, không thêm GUI/Phase 5.
+- Bằng chứng thực tế và giới hạn KDE/GNOME × X11/Wayland được ghi trong [`docs/installation.md`](../../../docs/installation.md); các môi trường chưa có phiên tương ứng giữ trạng thái “Chưa kiểm thử”.

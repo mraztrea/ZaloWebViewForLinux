@@ -131,3 +131,19 @@ Nghiệm thu thủ công ghi riêng KDE/GNOME × X11/Wayland. X11 đo `WM_CLASS`
 | FR-020 | Bộ key/argv cố định và giới hạn phạm vi | Contract không URL/action/pin/sudo |
 | SC-001–SC-007 | Test tự động, validator và fault injection | Targeted suite + full suite |
 | SC-008–SC-009 | Smoke menu và ma trận KDE/GNOME × X11/Wayland | Báo cáo quan sát thực tế |
+
+## Kết quả phân tích thay đổi GitNexus
+
+Đã làm mới index bằng GitNexus 1.6.11 rồi chạy `detect-changes --scope all --repo .` (sau khi đưa cả file mới vào phạm vi diff). Kết quả đầy đủ của lần chạy: **10 files, 74 symbols, 7 affected processes, risk level high**; lệnh hoàn tất, không báo `partial` hoặc `truncated`. Mức `high` đến từ các flow mới của service gọi resolver/validator/atomic writer hiện có, không phải thay đổi hành vi các helper đó.
+
+Các flow bị ảnh hưởng được GitNexus liệt kê:
+
+- `SyncProfileShortcut → ResolveDataDir` (5 bước)
+- `DesktopEntry → RejectControlCharacters` (3 bước)
+- `SyncProfileShortcut → ErrorResult` (3 bước)
+- `SyncProfileShortcut → OwnedEntry` (3 bước)
+- `SyncProfileShortcut → RejectControlCharacters` (3 bước)
+- `SyncProfileShortcut → ProfileValidationError` (4 bước)
+- `DesktopEntry → ResolveDataDir` (3 bước)
+
+Đã rà soát lại các cảnh báo CRITICAL/HIGH trước đó: chỉ thêm type kết quả và module mới, không sửa `Profile`, `DesktopIntegrationConfig`, `resolveDataDir`, `atomicWriteFile` hoặc validator hiện hữu.
