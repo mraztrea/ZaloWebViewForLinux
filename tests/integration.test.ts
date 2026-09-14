@@ -4,6 +4,7 @@ import * as path from 'node:path';
 import { createTempXdgEnvironment, TestXdgEnvironment } from './test-utils';
 import { ManagerService } from '../src/main/manager-handlers';
 import { RunnerControlServer } from '../src/main/runner-control';
+import { AttentionController } from '../src/main/notifier';
 import { resolveProfileDataDir, resolveRegistryPath, resolveSocketPath } from '../src/main/xdg-paths';
 
 /**
@@ -14,7 +15,8 @@ import { resolveProfileDataDir, resolveRegistryPath, resolveSocketPath } from '.
 describe('US5: chuỗi Manager đầu cuối', () => {
   let env: TestXdgEnvironment;
   const originalEnv = { ...process.env };
-  let server: RunnerControlServer | null = null;
+  const servers: RunnerControlServer[] = [];
+  const attentionControllers: AttentionController[] = [];
   const launched: string[][] = [];
 
   const DEAD_PID = 999999991;
@@ -45,10 +47,8 @@ describe('US5: chuỗi Manager đầu cuối', () => {
   });
 
   afterEach(async () => {
-    if (server) {
-      await server.stop().catch(() => undefined);
-      server = null;
-    }
+    await Promise.all(servers.splice(0).map(server => server.stop()));
+    attentionControllers.splice(0).forEach(controller => controller.dispose());
     process.env = { ...originalEnv };
     env.cleanup();
   });
@@ -64,22 +64,29 @@ describe('US5: chuỗi Manager đầu cuối', () => {
     // 2. Chưa chạy → stopped
     expect((await service.getRunnerStatus(a.profile.id)).state).toBe('stopped');
 
-    // 3. Khởi động runner thật cho A (mô phỏng process runner)
-    server = new RunnerControlServer(a.profile.id, {
+    // 3. Hai socket server và bộ điều khiển cảnh báo thật; không thay thế Electron GUI.
+    for (const { profile } of [a, b]) {
+    const attention = new AttentionController({
+      profileId: profile.id, mode: 'badge_count', desktopConfig: profile.desktopConfig,
+      effects: { render: () => undefined, showPopup: () => undefined, closePopup: () => undefined }
+    });
+    attention.onObservation({ mode: 'badge_count', hasElement: true, count: 2, text: '2', changedForAlert: true, timestamp: 1 });
+    attentionControllers.push(attention);
+    const server = new RunnerControlServer(profile.id, {
       onStatus: () => ({
         status: 'running',
-        profileId: a.profile.id,
-        url: 'https://a.vn',
+        profileId: profile.id,
+        url: profile.url,
         pid: DEAD_PID,
         uptimeSeconds: 3,
         windowState: { width: 1024, height: 768, isMaximized: false },
-        configRevision: a.profile.updatedAt,
-        attention: { active: true, mode: 'existence', count: 2 }
+        configRevision: profile.updatedAt,
+        attention: attention.getStatus()
       }),
       onShutdown: async () => {
-        await server?.stop().catch(() => undefined);
+        await server.stop();
       },
-      onClearAttention: () => ({ cleared: true }),
+      onClearAttention: () => ({ cleared: attention.clear() }),
       onTestXPath: async (params) => ({
         status: 'match',
         selector: params.selector,
@@ -90,7 +97,9 @@ describe('US5: chuỗi Manager đầu cuối', () => {
         executionTimeMs: 4
       })
     });
+    servers.push(server);
     await server.start();
+    }
 
     // 4. Mở A từ Manager
     const launch = await service.launchProfile(a.profile.id);
@@ -106,11 +115,15 @@ describe('US5: chuỗi Manager đầu cuối', () => {
     const xpath = await service.testXPath(a.profile.id, '//div[@id="x"]', 'existence');
     expect(xpath.status).toBe('match');
 
-    // 7. Xóa cảnh báo A — B không bị ảnh hưởng (B chưa chạy, clear của B lỗi rõ)
+    // 7. Clear và focus A không xóa cảnh báo B đang chạy.
     expect(await service.clearAttention(a.profile.id)).toEqual({ cleared: true });
-    await expect(service.clearAttention(b.profile.id)).rejects.toThrow(
-      /RUNNER_NOT_RUNNING|RUNNER_UNKNOWN/
-    );
+    expect((await service.getRunnerStatus(a.profile.id)).data?.attention?.active).toBe(false);
+    expect((await service.getRunnerStatus(b.profile.id)).data?.attention).toEqual({ active: true, mode: 'badge_count', count: 2 });
+    attentionControllers[0].onObservation({ mode: 'badge_count', hasElement: true, count: 3, text: '3', changedForAlert: true, timestamp: 2 });
+    attentionControllers[0].setFocused(true);
+    expect((await service.getRunnerStatus(a.profile.id)).data?.attention?.active).toBe(false);
+    expect((await service.getRunnerStatus(b.profile.id)).data?.attention?.active).toBe(true);
+    expect((await makeService().getRunnerStatus(b.profile.id)).state).toBe('running');
 
     // 8. Shortcut cho A
     const toggled = await service.toggleShortcut(a.profile.id, true);

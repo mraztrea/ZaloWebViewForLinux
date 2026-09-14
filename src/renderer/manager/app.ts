@@ -16,6 +16,11 @@ interface ManagerState {
 
 const state: ManagerState = { profiles: [], filter: '', loading: true, error: null };
 let lastFocused: HTMLElement | null = null;
+let formVersion = 0;
+let statusTimer: ReturnType<typeof setTimeout> | undefined;
+let refreshingStatus = false;
+let disposed = false;
+const DEFAULT_ICON = '../../assets/default-icon.png';
 
 function bridge(): Bridge | null {
   return typeof window !== 'undefined' && window.zaloview ? window.zaloview : null;
@@ -49,11 +54,12 @@ function makeCard(profile: Profile): HTMLElement {
   const icon = document.createElement('img');
   icon.className = 'profile-icon';
   icon.alt = '';
-  icon.src = profile.iconPath && profile.iconPath.startsWith('file://')
-    ? profile.iconPath
-    : '../assets/default-icon.png';
+  icon.src = profile.iconPath?.startsWith('/')
+    ? `file://${profile.iconPath.split('/').map(encodeURIComponent).join('/')}`
+    : profile.iconPath?.startsWith('file://') ? profile.iconPath : DEFAULT_ICON;
   icon.onerror = () => {
-    icon.src = '../assets/default-icon.png';
+    icon.onerror = null;
+    icon.src = DEFAULT_ICON;
   };
 
   const title = document.createElement('h3');
@@ -90,6 +96,23 @@ function makeCard(profile: Profile): HTMLElement {
   deleteBtn.dataset.action = 'delete';
   deleteBtn.textContent = 'Xóa';
 
+  const clearBtn = document.createElement('button');
+  clearBtn.type = 'button';
+  clearBtn.className = 'btn btn-small';
+  clearBtn.dataset.action = 'clear-attention';
+  clearBtn.textContent = 'Xóa cảnh báo';
+  clearBtn.disabled = true;
+  clearBtn.addEventListener('click', async () => {
+    clearBtn.disabled = true;
+    try {
+      await bridge()?.clearAttention(profile.id);
+      await refreshRunnerStates();
+    } catch (err: unknown) {
+      status.textContent = `Xóa cảnh báo thất bại: ${(err as Error).message}`;
+      clearBtn.disabled = false;
+    }
+  });
+
   const sessionBtn = document.createElement('button');
   sessionBtn.type = 'button';
   sessionBtn.className = 'btn btn-small btn-danger';
@@ -102,7 +125,7 @@ function makeCard(profile: Profile): HTMLElement {
   deleteBtn.addEventListener('click', () => void onDeleteProfile(profile));
   sessionBtn.addEventListener('click', () => void onDeleteSession(profile));
 
-  actions.append(openBtn, editBtn, deleteBtn, sessionBtn);
+  actions.append(openBtn, editBtn, clearBtn, deleteBtn, sessionBtn);
   card.append(icon, title, url, status, actions);
   return card;
 }
@@ -165,9 +188,12 @@ function describeRunnerState(stateValue: string): string {
 }
 
 async function refreshRunnerStates(): Promise<void> {
+  clearTimeout(statusTimer);
   const api = bridge();
-  if (!api || document.hidden) return;
+  if (!api || document.hidden || disposed || refreshingStatus) return;
+  refreshingStatus = true;
   const cards = Array.from(document.querySelectorAll<HTMLElement>('.profile-card'));
+  try {
   await Promise.all(
     cards.map(async (card) => {
       const id = card.dataset.profileId;
@@ -175,12 +201,28 @@ async function refreshRunnerStates(): Promise<void> {
       if (!id || !node) return;
       try {
         const status = await api.getRunnerStatus(id);
-        node.textContent = describeRunnerState(status.state);
+        const data = status.data;
+        const profile = state.profiles.find((p) => p.id === id);
+        const messages = [describeRunnerState(status.state)];
+        if (data?.status === 'starting') messages[0] = 'Trạng thái runner: đang khởi động';
+        if (data?.status === 'error') messages.push(`Lỗi: ${data.error ?? 'không tải được trang'}`);
+        if (status.state === 'running') {
+          if (!data?.configRevision) messages.push('Chưa xác định có cần mở lại');
+          else if (data.configRevision !== profile?.updatedAt) messages.push('Cấu hình cũ — cần mở lại runner');
+          messages.push(data?.attention?.active ? `Có cảnh báo (${data.attention.count})` : 'Không có cảnh báo');
+        }
+        node.textContent = messages.join('. ');
+        const clearBtn = card.querySelector<HTMLButtonElement>('[data-action="clear-attention"]');
+        if (clearBtn) clearBtn.disabled = status.state !== 'running' || !data?.attention?.active;
       } catch {
         node.textContent = describeRunnerState('unknown');
       }
     })
   );
+  } finally {
+    refreshingStatus = false;
+    if (!document.hidden && !disposed) statusTimer = setTimeout(() => void refreshRunnerStates(), 3000);
+  }
 }
 
 interface FormValues {
@@ -276,6 +318,7 @@ function hideIconStatus(): void {
 }
 
 async function onChooseIcon(): Promise<void> {
+  const version = formVersion;
   const api = bridge();
   if (!api) {
     showIconStatus('Cầu nối Manager chưa sẵn sàng.');
@@ -284,6 +327,7 @@ async function onChooseIcon(): Promise<void> {
   showIconStatus('Đang mở hộp chọn file…');
   try {
     const result = await api.chooseIcon();
+    if (version !== formVersion) return;
     if (!result) {
       hideIconStatus();
       return;
@@ -291,34 +335,38 @@ async function onChooseIcon(): Promise<void> {
     el<HTMLInputElement>('field-icon').value = result.path;
     showIconStatus(result.fallback ? `Dùng biểu tượng dự phòng: ${result.reason ?? ''}` : 'Đã chọn biểu tượng.');
   } catch (err: unknown) {
+    if (version !== formVersion) return;
     showIconStatus(`Chọn biểu tượng thất bại: ${(err as Error).message}`);
   }
 }
 
 async function onFetchIcon(profileUrl: string): Promise<void> {
+  const version = formVersion;
   const api = bridge();
   if (!api) {
     showIconStatus('Cầu nối Manager chưa sẵn sàng.');
     return;
   }
-  let origin: string;
   try {
-    origin = new URL(profileUrl).origin;
+    new URL(profileUrl);
   } catch {
     showIconStatus('Địa chỉ website chưa hợp lệ nên không thể tải icon.');
     return;
   }
   showIconStatus('Đang tải biểu tượng từ website…');
   try {
-    const result = await api.fetchIcon(`${origin}/favicon.ico`);
+    const result = await api.fetchIcon(profileUrl);
+    if (version !== formVersion) return;
     el<HTMLInputElement>('field-icon').value = result.path;
     showIconStatus(result.fallback ? `Dùng biểu tượng dự phòng: ${result.reason ?? ''}` : 'Đã tải biểu tượng.');
   } catch (err: unknown) {
+    if (version !== formVersion) return;
     showIconStatus(`Tải biểu tượng thất bại: ${(err as Error).message}`);
   }
 }
 
 function openForm(profile: Profile | null): void {
+  formVersion++;
   lastFocused = document.activeElement instanceof HTMLElement ? document.activeElement : null;
   fillForm(profile);
   const dialog = el<HTMLDialogElement>('profile-dialog');
@@ -327,12 +375,17 @@ function openForm(profile: Profile | null): void {
 }
 
 function closeForm(): void {
+  formVersion++;
   const dialog = el<HTMLDialogElement>('profile-dialog');
   if (dialog.open) dialog.close();
-  if (lastFocused) lastFocused.focus();
+  const id = el<HTMLInputElement>('field-id').value;
+  const target = lastFocused?.isConnected ? lastFocused
+    : document.querySelector<HTMLElement>(`[data-profile-id="${id}"] [data-action="edit"]`) ?? el('btn-add-profile');
+  target.focus();
 }
 
 async function onSaveForm(): Promise<void> {
+  const version = formVersion;
   const api = bridge();
   if (!api) {
     showFormError('Cầu nối Manager chưa sẵn sàng.');
@@ -346,6 +399,13 @@ async function onSaveForm(): Promise<void> {
       ? { id: values.id, name: values.name, url: values.url, iconPath: values.iconPath, xpathConfig: values.xpathConfig, desktopConfig: values.desktopConfig }
       : { name: values.name, url: values.url, iconPath: values.iconPath, userAgent: values.userAgent, xpathConfig: values.xpathConfig, desktopConfig: values.desktopConfig };
     const result = await api.saveProfile(input);
+    if (version !== formVersion) {
+      await reloadProfiles();
+      return;
+    }
+    // Registry đã lưu kể cả khi shortcut lỗi: lần thử lại phải sửa cùng ID.
+    el<HTMLInputElement>('field-id').value = result.profile.id;
+    el<HTMLInputElement>('field-useragent').disabled = true;
     if (result.shortcut.status === 'error') {
       showFormError(`Đã lưu profile nhưng đồng bộ shortcut thất bại: ${result.shortcut.message}. Hãy thử lại.`);
       await reloadProfiles();
@@ -366,6 +426,7 @@ async function onSaveForm(): Promise<void> {
     await reloadProfiles();
     closeForm();
   } catch (err: unknown) {
+    if (version !== formVersion) return;
     showFormError((err as Error).message);
   } finally {
     saveBtn.disabled = false;
@@ -373,6 +434,7 @@ async function onSaveForm(): Promise<void> {
 }
 
 async function onTestXPath(): Promise<void> {
+  const version = formVersion;
   const api = bridge();
   if (!api) {
     showXPathResult('Cầu nối Manager chưa sẵn sàng.');
@@ -392,8 +454,12 @@ async function onTestXPath(): Promise<void> {
   showXPathResult('Đang thử XPath…');
   try {
     const result = await api.testXPath(id, selector, mode);
-    showXPathResult(`Kết quả: ${result.status} — ${result.textPreview || `đếm ${result.count}`}`);
+    if (version !== formVersion || selector !== el<HTMLInputElement>('field-xpath').value.trim()
+      || mode !== el<HTMLSelectElement>('field-mode').value) return;
+    const labels = { match: 'Khớp', no_match: 'Không khớp', invalid_selector: 'Sai cú pháp XPath', invalid_data: 'Dữ liệu không hợp lệ', error: 'Lỗi thực thi' };
+    showXPathResult(`Kết quả: ${labels[result.status]} — ${result.error || result.textPreview || `đếm ${result.count}`}`);
   } catch (err: unknown) {
+    if (version !== formVersion) return;
     showXPathResult(`Thử XPath thất bại: ${(err as Error).message}`);
   }
 }
@@ -451,6 +517,7 @@ document.addEventListener('DOMContentLoaded', () => {
   el('search-input').addEventListener('input', (event) => {
     state.filter = (event.target as HTMLInputElement).value;
     renderList();
+    void refreshRunnerStates();
   });
   el('profile-form').addEventListener('submit', (event) => {
     event.preventDefault();
@@ -462,13 +529,22 @@ document.addEventListener('DOMContentLoaded', () => {
   el('btn-fetch-icon').addEventListener('click', () => {
     void onFetchIcon(el<HTMLInputElement>('field-url').value.trim());
   });
-  el<HTMLDialogElement>('profile-dialog').addEventListener('cancel', () => {
-    if (lastFocused) {
-      setTimeout(() => lastFocused?.focus(), 0);
-    }
+  el<HTMLDialogElement>('profile-dialog').addEventListener('cancel', (event) => {
+    event.preventDefault();
+    closeForm();
   });
+  const theme = el<HTMLSelectElement>('theme-select');
+  try { theme.value = localStorage.getItem('manager-theme') ?? 'system'; } catch { /* Thao tác vẫn dùng được khi storage bị chặn. */ }
+  const applyTheme = () => {
+    document.documentElement.dataset.theme = theme.value;
+    try { localStorage.setItem('manager-theme', theme.value); } catch { /* Chỉ lưu tùy chọn khi có storage. */ }
+  };
+  theme.addEventListener('change', applyTheme);
+  applyTheme();
   document.addEventListener('visibilitychange', () => {
+    clearTimeout(statusTimer);
     if (!document.hidden) void reloadProfiles();
   });
+  window.addEventListener('pagehide', () => { disposed = true; clearTimeout(statusTimer); });
   void reloadProfiles();
 });

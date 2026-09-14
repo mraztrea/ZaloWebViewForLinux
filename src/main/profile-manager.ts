@@ -183,7 +183,7 @@ export class ProfileManager {
     }
 
     const existing = registry.profiles[index];
-    const now = new Date().toISOString();
+    const now = new Date(Math.max(Date.now(), Date.parse(existing.updatedAt) + 1)).toISOString();
 
     const merged: Profile = validateProfile({
       ...existing,

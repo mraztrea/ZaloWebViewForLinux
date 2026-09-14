@@ -1,6 +1,7 @@
 import { beforeEach, afterEach, describe, expect, it, vi } from 'vitest';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
+import { pathToFileURL } from 'node:url';
 import { createTempXdgEnvironment, TestXdgEnvironment } from './test-utils';
 import { ProfileManager } from '../src/main/profile-manager';
 import { RunnerControlServer } from '../src/main/runner-control';
@@ -15,7 +16,7 @@ import {
   type ManagerWindowRef
 } from '../src/main/manager-handlers';
 
-const MANAGER_URL = 'file:///app/dist/renderer/manager/index.html';
+const MANAGER_URL = pathToFileURL(path.resolve(__dirname, '../src/renderer/manager/index.html')).href;
 
 function makeWindow(url: string = MANAGER_URL): ManagerWindowRef {
   const mainFrame = { url };
@@ -137,11 +138,12 @@ describe('ManagerService US1: getProfiles/saveProfile', () => {
   });
 
   it('tạo mới sinh ID/timestamps ở main, không tin createdAt renderer gửi', async () => {
-    const result = await service.saveProfile({
+    await expect(service.saveProfile({
       name: 'Zalo A',
       url: 'https://chat.zalo.me',
       createdAt: '2000-01-01T00:00:00.000Z'
-    } as never);
+    } as never)).rejects.toThrow(/VALIDATION_ERROR/);
+    const result = await service.saveProfile({ name: 'Zalo A', url: 'https://chat.zalo.me' });
     expect(result.profile.id).toMatch(/^[a-z0-9]+(?:-[a-z0-9]+)*$/);
     expect(result.profile.createdAt).not.toBe('2000-01-01T00:00:00.000Z');
     expect(result.profile.name).toBe('Zalo A');
@@ -375,7 +377,7 @@ describe('ManagerService US3: shortcut từng phần (P5-04)', () => {
         success: true,
         data: {
           status: 'running',
-          profileId: 'p',
+          profileId: 'cu',
           url: 'https://a.vn',
           pid: 4242,
           uptimeSeconds: 5,
@@ -664,7 +666,7 @@ describe('ManagerService US4: deleteProfile (P5-07)', () => {
           success: true,
           data: {
             status: 'running',
-            profileId: 'p',
+            profileId: 'stubborn',
             url: 'https://a.vn',
             pid: 424242,
             uptimeSeconds: 9,
@@ -681,7 +683,7 @@ describe('ManagerService US4: deleteProfile (P5-07)', () => {
     const socketPath = resolveSocketPath('stubborn');
     fs.mkdirSync(path.dirname(socketPath), { recursive: true });
     fs.writeFileSync(socketPath, 'stubborn', 'utf-8');
-    const created = await service.saveProfile({ id: 'stubborn', name: 'Stubborn', url: 'https://a.vn' });
+    const created = await service.saveProfile({ name: 'Stubborn', url: 'https://a.vn' });
     await expect(service.deleteProfile(created.profile.id)).rejects.toThrow(/RUNNER_STOP_TIMEOUT/);
     expect(await service.getProfiles()).toHaveLength(1);
   });
@@ -766,7 +768,7 @@ describe('ManagerService US4: deleteProfileSession (P5-08)', () => {
         success: true,
         data: {
           status: 'running',
-          profileId: 'p',
+          profileId: 'busy',
           url: 'https://a.vn',
           pid: 1,
           uptimeSeconds: 1,
@@ -778,7 +780,7 @@ describe('ManagerService US4: deleteProfileSession (P5-08)', () => {
     const socketPath = resolveSocketPath('busy');
     fs.mkdirSync(path.dirname(socketPath), { recursive: true });
     fs.writeFileSync(socketPath, 'busy', 'utf-8');
-    await running.saveProfile({ id: 'busy', name: 'Busy', url: 'https://a.vn' });
+    await running.saveProfile({ name: 'Busy', url: 'https://a.vn' });
     await expect(running.deleteProfileSession('busy')).rejects.toThrow(/RUNNER_RUNNING/);
 
     const service = new ManagerService({ confirmAction: async () => true });

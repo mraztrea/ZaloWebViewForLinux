@@ -12,17 +12,19 @@
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
+import { pathToFileURL } from 'node:url';
 import { createHash } from 'node:crypto';
 import { spawn } from 'node:child_process';
 import { createRequire } from 'node:module';
 import { ProfileManager } from './profile-manager';
-import { validateProfileId } from './profile-validator';
+import { validateProfileId, validateProfileName, validateProfileUrl, validateXPathConfig, validateDesktopConfig } from './profile-validator';
 import { resolveDataDir, resolveProfileDataDir, resolveSocketPath } from './xdg-paths';
 import { sendSocketCommand } from './runner-control';
 import { removeProfileShortcut, syncProfileShortcut } from './desktop-service';
 import {
   fetchIconBuffer,
   ICON_MAX_DIMENSION,
+  ICON_MAX_BYTES,
   IconFetchError,
   type FetchedIcon,
   type ImageDecoder
@@ -106,7 +108,7 @@ export interface ManagerServiceDeps {
   syncShortcut?: (profile: Profile, launcherPath: string) => Promise<ShortcutSyncResult>;
   removeShortcut?: (profileId: string) => Promise<ShortcutSyncResult>;
   launcherPath?: string;
-  spawnRunner?: (args: string[]) => void;
+  spawnRunner?: (args: string[]) => void | number | Promise<void | number>;
   execPath?: string;
   appPath?: string;
   isPackaged?: boolean;
@@ -130,6 +132,45 @@ export function resolveLauncherPath(): string {
 function assertRecord(value: unknown, field: string): asserts value is Record<string, unknown> {
   if (!value || typeof value !== 'object' || Array.isArray(value)) {
     throw new ManagerError('VALIDATION_ERROR', `${field} phải là một đối tượng.`);
+  }
+}
+
+function assertAllowedFields(value: Record<string, unknown>, allowed: string[]): void {
+  if (Object.keys(value).some(key => !allowed.includes(key))) {
+    throw new ManagerError('VALIDATION_ERROR', 'Payload chứa trường không được phép.');
+  }
+}
+
+function validateSaveInput(value: unknown): asserts value is SaveProfileInput {
+  assertRecord(value, 'profile');
+  assertAllowedFields(value, ['id', 'name', 'url', 'iconPath', 'userAgent', 'xpathConfig', 'desktopConfig']);
+  if (value.id !== undefined) assertValidProfileId(value.id);
+  for (const field of ['iconPath', 'userAgent']) {
+    if (value[field] !== undefined && typeof value[field] !== 'string') {
+      throw new ManagerError('VALIDATION_ERROR', `${field} phải là chuỗi.`);
+    }
+  }
+  if (value.xpathConfig !== undefined) {
+    assertRecord(value.xpathConfig, 'xpathConfig');
+    assertAllowedFields(value.xpathConfig, ['selector', 'mode', 'pollIntervalMs']);
+    const config = value.xpathConfig;
+    if ((config.selector !== undefined && typeof config.selector !== 'string')
+      || (config.pollIntervalMs !== undefined && !Number.isInteger(config.pollIntervalMs))) {
+      throw new ManagerError('VALIDATION_ERROR', 'Selector phải là chuỗi, chu kỳ quét phải là số nguyên.');
+    }
+    if (config.mode !== undefined) assertXPathMode(config.mode);
+  }
+  if (value.desktopConfig !== undefined) {
+    assertRecord(value.desktopConfig, 'desktopConfig');
+    assertAllowedFields(value.desktopConfig, ['flashTaskbar', 'showTaskbarBadge', 'minimizeToTray', 'showDesktopNotification', 'createDesktopShortcut']);
+  }
+  try {
+    validateProfileName(value.name);
+    validateProfileUrl(value.url);
+    validateXPathConfig(value.xpathConfig);
+    validateDesktopConfig(value.desktopConfig);
+  } catch (err: unknown) {
+    throw new ManagerError('VALIDATION_ERROR', (err as Error).message);
   }
 }
 
@@ -182,7 +223,7 @@ export interface ManagerWindowRef {
   };
 }
 
-const MANAGER_PAGE_SUFFIX = 'renderer/manager/index.html';
+const MANAGER_PAGE_URL = pathToFileURL(path.join(__dirname, '../renderer/manager/index.html')).href;
 
 /**
  * Kiểm tra event IPC đến từ frame chính của cửa sổ Manager local.
@@ -196,11 +237,10 @@ export function isTrustedManagerEvent(event: ManagerIpcEvent, win: ManagerWindow
   if (typeof rawUrl !== 'string' || !rawUrl) return false;
   try {
     const parsed = new URL(rawUrl);
-    if (parsed.protocol !== 'file:') return false;
+    return parsed.href === MANAGER_PAGE_URL;
   } catch {
     return false;
   }
-  return rawUrl.replace(/\\/g, '/').endsWith(MANAGER_PAGE_SUFFIX);
 }
 
 export interface IpcMainLike {
@@ -209,6 +249,8 @@ export interface IpcMainLike {
 
 export class ManagerService {
   protected readonly deps: Required<ManagerServiceDeps>;
+  private readonly launchingRunners = new Map<string, number | undefined>();
+  private readonly busyProfiles = new Set<string>();
 
   constructor(deps: ManagerServiceDeps = {}) {
     this.deps = {
@@ -217,7 +259,7 @@ export class ManagerService {
       syncShortcut: deps.syncShortcut ?? syncProfileShortcut,
       removeShortcut: deps.removeShortcut ?? removeProfileShortcut,
       launcherPath: deps.launcherPath ?? resolveLauncherPath(),
-      spawnRunner: deps.spawnRunner ?? defaultSpawnRunner,
+      spawnRunner: deps.spawnRunner ?? ((args) => defaultSpawnRunner(args, deps.execPath ?? process.execPath)),
       execPath: deps.execPath ?? process.execPath,
       appPath: deps.appPath ?? '',
       isPackaged: deps.isPackaged ?? false,
@@ -246,15 +288,25 @@ export class ManagerService {
   }
 
   public async saveProfile(input: SaveProfileInput): Promise<ManagerSaveResult> {
-    assertRecord(input, 'profile');
-    const raw = input as Record<string, unknown>;
+    validateSaveInput(input);
+    const raw = input;
+    if (raw.id !== undefined) this.assertProfileAvailable(assertValidProfileId(raw.id));
+    const icon = asOptionalString(raw.iconPath);
+    if (icon && icon !== this.deps.fallbackIconPath) {
+      try {
+        const relative = path.relative(fs.realpathSync(this.deps.iconDir), fs.realpathSync(icon));
+        if (!path.isAbsolute(icon) || !relative || relative.startsWith('..') || path.isAbsolute(relative)) throw new Error();
+      } catch {
+        throw new ManagerError('VALIDATION_ERROR', 'Hãy chọn hoặc tải lại biểu tượng trong vùng icon của ứng dụng.');
+      }
+    }
     if (typeof raw.name !== 'string' || typeof raw.url !== 'string') {
       throw new ManagerError('VALIDATION_ERROR', 'name và url là bắt buộc và phải là chuỗi.');
     }
 
     let saved: Profile;
     try {
-      const rawId = typeof raw.id === 'string' && raw.id.trim() ? raw.id : undefined;
+      const rawId = raw.id;
       if (rawId === undefined) {
         saved = this.deps.profileManager.createProfile({
           name: raw.name,
@@ -268,16 +320,8 @@ export class ManagerService {
         const id = assertValidProfileId(rawId);
         const existing = this.deps.profileManager.getProfile(id);
         if (!existing) {
-          saved = this.deps.profileManager.createProfile({
-            id,
-            name: raw.name,
-            url: raw.url,
-            iconPath: asOptionalString(raw.iconPath),
-            userAgent: asOptionalString(raw.userAgent),
-            xpathConfig: raw.xpathConfig as Profile['xpathConfig'],
-            desktopConfig: raw.desktopConfig as Profile['desktopConfig']
-          });
-        } else {
+          throw new ManagerError('NOT_FOUND', `Không tìm thấy profile với ID: "${id}".`);
+        }
         const updates: {
           name?: string;
           url?: string;
@@ -286,13 +330,12 @@ export class ManagerService {
           desktopConfig?: Profile['desktopConfig'];
         } = { name: raw.name, url: raw.url };
         // userAgent bất biến khi sửa: luôn giữ giá trị cũ, bỏ qua renderer gửi.
-        if (raw.iconPath !== undefined) updates.iconPath = asOptionalString(raw.iconPath);
+        if (Object.hasOwn(raw, 'iconPath')) updates.iconPath = asOptionalString(raw.iconPath);
         if (raw.xpathConfig !== undefined) updates.xpathConfig = raw.xpathConfig as Profile['xpathConfig'];
         if (raw.desktopConfig !== undefined) {
           updates.desktopConfig = raw.desktopConfig as Profile['desktopConfig'];
         }
         saved = this.deps.profileManager.updateProfile(id, updates);
-        }
       }
     } catch (err: unknown) {
       if (err instanceof ManagerError) throw err;
@@ -309,6 +352,8 @@ export class ManagerService {
       throw new ManagerError('REGISTRY_ERROR', `Không thể lưu profile: ${(err as Error).message}`);
     }
 
+    this.busyProfiles.add(saved.id);
+    try {
     let shortcut: ShortcutSyncResult;
     try {
       shortcut = await this.deps.syncShortcut(saved, this.deps.launcherPath);
@@ -317,10 +362,14 @@ export class ManagerService {
     }
 
     return { profile: saved, shortcut, restartRequired: await this.checkRestartRequired(saved) };
+    } finally { this.busyProfiles.delete(saved.id); }
   }
 
   public async deleteProfile(profileId: string): Promise<DeleteProfileResult> {
     const id = assertValidProfileId(profileId);
+    this.assertProfileAvailable(id);
+    this.busyProfiles.add(id);
+    try {
     let profile: Profile;
     try {
       const found = this.deps.profileManager.getProfile(id);
@@ -364,6 +413,7 @@ export class ManagerService {
     }
     void profile;
     return { removed: true, sessionKept: true };
+    } finally { this.busyProfiles.delete(id); }
   }
 
   /**
@@ -372,25 +422,16 @@ export class ManagerService {
    */
   protected async ensureRunnerStopped(profileId: string): Promise<void> {
     const socketPath = this.resolveSocket(profileId);
-    if (!fs.existsSync(socketPath)) return;
-
-    let status: RunnerStatusData;
-    try {
-      const response = await this.deps.sendCommand(socketPath, 'status');
-      if (!response || response.success !== true || !isRunnerStatusData(response.data)) {
-        throw new ManagerError('RUNNER_UNKNOWN', `Không xác định được trạng thái runner "${profileId}".`);
-      }
-      status = response.data;
-    } catch (err: unknown) {
-      if (err instanceof ManagerError) throw err;
-      throw new ManagerError(
-        'RUNNER_UNKNOWN',
-        `Không thể liên lạc với runner "${profileId}": ${(err as Error).message}. Dữ liệu được giữ lại.`
-      );
+    const probed = await this.probeRunnerState(profileId);
+    if (probed.state === 'stopped') return;
+    if (probed.state !== 'running' || !probed.data) {
+      throw new ManagerError('RUNNER_UNKNOWN', `Không xác định được trạng thái runner "${profileId}". Dữ liệu được giữ lại.`);
     }
+    const status = probed.data;
 
     try {
-      await this.deps.sendCommand(socketPath, 'shutdown');
+      const response = await this.deps.sendCommand(socketPath, 'shutdown');
+      if (!response.success) throw new Error(response.error ?? 'Runner từ chối lệnh dừng.');
     } catch (err: unknown) {
       throw new ManagerError(
         'RUNNER_STOP_FAILED',
@@ -415,6 +456,37 @@ export class ManagerService {
 
   public async deleteProfileSession(profileId: string): Promise<DeleteSessionResult> {
     const id = assertValidProfileId(profileId);
+    this.assertProfileAvailable(id);
+    this.busyProfiles.add(id);
+    try {
+    await this.assertSessionRunnerStopped(id);
+    const target = resolveProfileDataDir(id);
+    const confirmed = await this.deps.confirmAction(
+      `Xóa dữ liệu phiên của profile "${id}"?`,
+      `Xóa toàn bộ phiên đăng nhập và trạng thái website trong ${target}. Hồ sơ profile không bị ảnh hưởng.`
+    );
+    if (!confirmed) return { deleted: false, cancelled: true };
+    // Dialog có thể mở lâu: kiểm tra lại ngay trước thao tác xóa.
+    await this.assertSessionRunnerStopped(id);
+    const appRoot = resolveDataDir();
+    for (const candidate of [path.dirname(target), target]) {
+      if (fs.existsSync(candidate)) {
+        const relative = path.relative(fs.realpathSync(appRoot), fs.realpathSync(candidate));
+        if (!relative || relative.startsWith('..') || path.isAbsolute(relative)) {
+          throw new ManagerError('PATH_TRAVERSAL', 'Đường dẫn phiên nằm ngoài vùng dữ liệu ứng dụng.');
+        }
+      }
+    }
+    try {
+      fs.rmSync(target, { recursive: true, force: true });
+    } catch (err: unknown) {
+      throw new ManagerError('SESSION_DELETE_FAILED', `Không thể xóa phiên của "${id}": ${(err as Error).message}`);
+    }
+    return { deleted: true };
+    } finally { this.busyProfiles.delete(id); }
+  }
+
+  private async assertSessionRunnerStopped(id: string): Promise<void> {
     const state = await this.probeRunnerState(id).catch(
       (): ManagerRunnerStatus => ({ state: 'unknown' })
     );
@@ -430,32 +502,11 @@ export class ManagerService {
         `Chưa xác định được runner "${id}" đã dừng. Dữ liệu được giữ lại.`
       );
     }
-    const appRoot = resolveDataDir();
-    const target = resolveProfileDataDir(id);
-    const relative = path.relative(appRoot, target);
-    if (!relative || relative.startsWith('..') || path.isAbsolute(relative)) {
-      throw new ManagerError('PATH_TRAVERSAL', 'Đường dẫn phiên nằm ngoài vùng dữ liệu ứng dụng.');
-    }
-    const confirmed = await this.deps.confirmAction(
-      `Xóa dữ liệu phiên của profile "${id}"?`,
-      'Hành động này xóa toàn bộ phiên đăng nhập và trạng thái website của đúng profile trên. Hồ sơ profile không bị ảnh hưởng.'
-    );
-    if (!confirmed) return { deleted: false, cancelled: true };
-    try {
-      if (fs.existsSync(target)) {
-        fs.rmSync(target, { recursive: true, force: true });
-      }
-    } catch (err: unknown) {
-      throw new ManagerError(
-        'SESSION_DELETE_FAILED',
-        `Không thể xóa phiên của "${id}": ${(err as Error).message}`
-      );
-    }
-    return { deleted: true };
   }
 
   public async launchProfile(profileId: string): Promise<LaunchResult> {
     const id = assertValidProfileId(profileId);
+    this.assertProfileAvailable(id);
     const profile = this.deps.profileManager.getProfile(id);
     if (!profile) {
       throw new ManagerError('NOT_FOUND', `Không tìm thấy profile với ID: "${id}".`);
@@ -467,8 +518,13 @@ export class ManagerService {
       throw new ManagerError('LAUNCH_FAILED', 'Thiếu đường dẫn ứng dụng để khởi chạy runner.');
     }
     try {
-      this.deps.spawnRunner(args);
+      if (this.launchingRunners.has(id)) await this.probeRunnerState(id);
+      if (this.launchingRunners.has(id)) return { requested: true, profileId: id };
+      this.launchingRunners.set(id, undefined);
+      const pid = await this.deps.spawnRunner(args);
+      this.launchingRunners.set(id, typeof pid === 'number' ? pid : undefined);
     } catch (err: unknown) {
+      this.launchingRunners.delete(id);
       if (err instanceof ManagerError) throw err;
       throw new ManagerError('LAUNCH_FAILED', `Không thể khởi chạy runner: ${(err as Error).message}`);
     }
@@ -477,6 +533,7 @@ export class ManagerService {
 
   public async toggleShortcut(profileId: string, enabled: boolean): Promise<ToggleShortcutResult> {
     const id = assertValidProfileId(profileId);
+    this.assertProfileAvailable(id);
     assertBoolean(enabled, 'enabled');
     const existing = this.deps.profileManager.getProfile(id);
     if (!existing) {
@@ -490,6 +547,8 @@ export class ManagerService {
     } catch (err: unknown) {
       throw mapRegistryError(err, 'Không thể lưu tùy chọn shortcut');
     }
+    this.busyProfiles.add(id);
+    try {
     let shortcut: ShortcutSyncResult;
     try {
       shortcut = await this.deps.syncShortcut(saved, this.deps.launcherPath);
@@ -497,6 +556,11 @@ export class ManagerService {
       shortcut = { status: 'error', path: '', message: (err as Error).message };
     }
     return { saved, shortcut };
+    } finally { this.busyProfiles.delete(id); }
+  }
+
+  private assertProfileAvailable(id: string): void {
+    if (this.busyProfiles.has(id)) throw new ManagerError('PROFILE_BUSY', `Profile "${id}" đang được lưu hoặc xóa. Hãy thử lại sau.`);
   }
 
   public async getRunnerStatus(profileId: string): Promise<ManagerRunnerStatus> {
@@ -583,7 +647,19 @@ export class ManagerService {
     if (!filePath) return null;
     let buffer: Buffer;
     try {
-      buffer = fs.readFileSync(filePath);
+      const fd = fs.openSync(filePath, 'r');
+      try {
+        const stat = fs.fstatSync(fd);
+        if (!stat.isFile() || stat.size > ICON_MAX_BYTES) return this.fallbackIcon('Tệp không hợp lệ hoặc vượt quá 2 MiB.');
+        buffer = Buffer.alloc(ICON_MAX_BYTES + 1);
+        let size = 0;
+        while (size < buffer.length) {
+          const read = fs.readSync(fd, buffer, size, buffer.length - size, null);
+          if (!read) break;
+          size += read;
+        }
+        buffer = buffer.subarray(0, size);
+      } finally { fs.closeSync(fd); }
     } catch (err: unknown) {
       return this.fallbackIcon(`Không thể đọc tệp: ${(err as Error).message}`);
     }
@@ -621,11 +697,17 @@ export class ManagerService {
     try {
       response = await this.deps.sendCommand(socketPath, 'status');
     } catch {
+      if (this.launchingRunners.has(profileId)) {
+        const pid = this.launchingRunners.get(profileId);
+        if (pid === undefined || this.deps.isProcessAlive(pid)) return { state: 'unknown' };
+        this.launchingRunners.delete(profileId);
+      }
       return { state: fs.existsSync(socketPath) ? 'unknown' : 'stopped' };
     }
-    if (!response || response.success !== true || !isRunnerStatusData(response.data)) {
+    if (!response || response.success !== true || !isRunnerStatusData(response.data) || response.data.profileId !== profileId) {
       return { state: 'unknown' };
     }
+    this.launchingRunners.delete(profileId);
     return { state: 'running', data: response.data };
   }
 
@@ -646,11 +728,13 @@ export class ManagerService {
   }
 
   private storeIconBuffer(buffer: Buffer): IconResult {
-    const decoded = this.deps.decodeImage(buffer);
+    if (buffer.length > ICON_MAX_BYTES) return this.fallbackIcon('Biểu tượng vượt quá 2 MiB.');
+    let decoded;
+    try { decoded = this.deps.decodeImage(buffer); } catch { return this.fallbackIcon('Không thể giải mã ảnh.'); }
     if (!decoded) {
       return this.fallbackIcon('Ảnh không đọc được hoặc sai định dạng.');
     }
-    if (decoded.width > ICON_MAX_DIMENSION || decoded.height > ICON_MAX_DIMENSION) {
+    if (!(decoded.width > 0 && decoded.height > 0) || decoded.width > ICON_MAX_DIMENSION || decoded.height > ICON_MAX_DIMENSION) {
       return this.fallbackIcon(`Ảnh vượt quá ${ICON_MAX_DIMENSION}×${ICON_MAX_DIMENSION}.`);
     }
     try {
@@ -681,9 +765,12 @@ function isRunnerStatusData(value: unknown): value is RunnerStatusData {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
   const raw = value as Record<string, unknown>;
   return (
-    typeof raw.status === 'string' &&
+    ['starting', 'running', 'error'].includes(raw.status as string) &&
     typeof raw.profileId === 'string' &&
-    typeof raw.pid === 'number'
+    Number.isSafeInteger(raw.pid) && (raw.pid as number) > 0 &&
+    typeof raw.url === 'string' && Number.isFinite(raw.uptimeSeconds) &&
+    !!raw.windowState && typeof raw.windowState === 'object' &&
+    (raw.configRevision === undefined || typeof raw.configRevision === 'string')
   );
 }
 
@@ -702,28 +789,30 @@ function isXPathEvaluationResult(value: unknown): value is XPathEvaluationResult
     typeof raw.status === 'string' &&
     XPATH_RESULT_STATUSES.includes(raw.status as XPathEvaluationStatus) &&
     typeof raw.selector === 'string' &&
-    typeof raw.mode === 'string'
+    XPATH_MODES.includes(raw.mode as XPathObservationMode) &&
+    typeof raw.hasElement === 'boolean' && Number.isFinite(raw.count) && (raw.count as number) >= 0 &&
+    typeof raw.textPreview === 'string' && Number.isFinite(raw.executionTimeMs) &&
+    (raw.error === undefined || typeof raw.error === 'string')
   );
 }
 
-function defaultSpawnRunner(args: string[]): void {
-  try {
-    const child = spawn(process.execPath, args, { detached: true, stdio: 'ignore' });
-    child.on('error', (err: Error) => {
-      console.warn('[ZaloWebView] Không thể khởi chạy runner:', err.message);
+function defaultSpawnRunner(args: string[], execPath: string): Promise<number | undefined> {
+  return new Promise((resolve, reject) => {
+    const child = spawn(execPath, args, { detached: true, stdio: 'ignore' });
+    child.once('error', reject);
+    child.once('spawn', () => {
+      child.unref();
+      resolve(child.pid);
     });
-    child.unref();
-  } catch (err: unknown) {
-    throw new ManagerError('LAUNCH_FAILED', `Không thể khởi chạy runner: ${(err as Error).message}`);
-  }
+  });
 }
 
 function defaultIsProcessAlive(pid: number): boolean {
   try {
     process.kill(pid, 0);
     return true;
-  } catch {
-    return false;
+  } catch (err: unknown) {
+    return (err as NodeJS.ErrnoException).code !== 'ESRCH';
   }
 }
 

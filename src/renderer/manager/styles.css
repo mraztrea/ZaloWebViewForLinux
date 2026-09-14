@@ -338,7 +338,7 @@ select:focus-visible {
 }
 
 @media (prefers-color-scheme: light) {
-  :root {
+  :root:not([data-theme="dark"]) {
     --bg-color: #f3f5f8;
     --surface-color: #ffffff;
     --border-color: #d9e0e8;
@@ -346,8 +346,20 @@ select:focus-visible {
     --text-secondary: #5b6b7c;
   }
 
-  .form-error {
+  :root:not([data-theme="dark"]) .form-error {
     background-color: #fee2e2;
     color: #991b1b;
   }
 }
+
+:root[data-theme="light"] {
+  color-scheme: light;
+  --bg-color: #f3f5f8;
+  --surface-color: #ffffff;
+  --border-color: #d9e0e8;
+  --text-primary: #16202c;
+  --text-secondary: #5b6b7c;
+}
+
+:root[data-theme="dark"] { color-scheme: dark; }
+:root[data-theme="light"] .form-error { background-color: #fee2e2; color: #991b1b; }
