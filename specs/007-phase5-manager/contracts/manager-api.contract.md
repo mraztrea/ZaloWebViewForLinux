@@ -6,7 +6,7 @@ Hợp đồng cho preload `window.zaloview` ở Manager. Mọi lời gọi trả
 
 ## Quy tắc chung
 
-- Chỉ expose đúng 10 API dưới đây; không expose cơ chế gọi chung, không expose `ipcRenderer`/event.
+- Chỉ expose đúng 11 API dưới đây; không expose cơ chế gọi chung, không expose `ipcRenderer`/event.
 - Main từ chối: sender là website/iframe, URL không phải trang Manager local, payload null/sai kiểu/thừa trường nguy hiểm. Trường hợp vi phạm không chạm storage/socket.
 - Không tin `createdAt`/xác nhận do renderer gửi; xác nhận xóa phiên bằng dialog native do main quản lý.
 
@@ -16,12 +16,14 @@ Hợp đồng cho preload `window.zaloview` ở Manager. Mọi lời gọi trả
 
 Trả toàn bộ profile đã validate từ registry. Tệp hỏng → lỗi rõ ràng (không giả danh sách rỗng).
 
-### `saveProfile(input)` → `{ profile, shortcut, restartRequired }`
+### `saveProfile(input)` → `{ profile, shortcut, restartRequired, iconWarning? }`
 
 - `input`: `{ id?, name, url, iconPath?, userAgent?, xpathConfig?, desktopConfig? }` (chỉ trường cho phép sửa).
 - Main: tạo mới sinh ID + timestamps; cập nhật giữ ID/`createdAt`/tác nhân trình duyệt cũ và mọi cờ `false`; lưu registry xong mới sync shortcut.
+- Không có `id` là tạo mới; có `id` là sửa profile đã tồn tại, nếu không tìm thấy trả `NOT_FOUND`. Khi shortcut lỗi sau lưu mới, UI giữ `profile.id` trả về để thử lại trên cùng profile.
 - `shortcut`: `ShortcutSyncResult` của phase 4 (`created`/`updated`/`removed`/`unchanged`/`error` + đường dẫn + thông điệp).
 - `restartRequired`: so revision snapshot runner với profile đã lưu; không lấy được revision → chưa xác định.
+- `iconWarning`: lý do dùng biểu tượng dự phòng khi icon trong vùng app đã mất; không chặn lưu cấu hình. Đường ngoài vùng app hoặc symlink thoát vùng vẫn bị từ chối.
 
 ### `deleteProfile(profileId)` → kết quả từng bước
 

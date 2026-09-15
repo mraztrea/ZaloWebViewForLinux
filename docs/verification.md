@@ -2,6 +2,28 @@
 
 Tài liệu này chỉ ghi kết quả quan sát thực tế. Môi trường không truy cập được giữ nguyên "Chưa kiểm thử".
 
+## Đợt review và sửa Phase 5 — 2026-09-15
+
+- Mã nguồn: `6938513` cùng các sửa tiếp theo trong working tree của nhánh `007-phase5-manager`; phạm vi review từ `844cbbc`.
+- Môi trường: Linux headless, Node `v22.23.1`, Electron `44.3.0`, Vitest `3.2.7`, Chrome `153.0.8010.36`. Không có DISPLAY, Wayland hoặc Xvfb.
+- `npm ci` đã chạy thành công khi bắt đầu review ngày 2026-09-14.
+- `npm run typecheck`, `npm run build`, `npm test` chạy lại ngày 2026-09-15 đều đạt: **22 tệp, 181 test, không bỏ qua test**.
+
+| Phạm vi | Bằng chứng quan sát |
+|---|---|
+| IPC, lưu profile, revision | `manager-regressions.test.ts`: từ chối URL local giả mạo, ID/config sai kiểu, field lạ; giữ revision tăng khi lưu cùng mili giây |
+| Launch/xóa/session | Lỗi spawn thật (`ENOENT`), không xóa khi đang khởi động, chặn mở/sửa đồng thời lúc xóa, xử lý shutdown bị từ chối; kiểm tra lại sau dialog và chặn symlink thoát vùng |
+| Icon | Deadline chung cho body/redirect; trần byte của file local; đường icon thuộc app; tìm icon tương đối từ HTML sau redirect; icon đã mất dùng fallback kèm cảnh báo và không chặn lưu |
+| Renderer trong Chrome thật | `manager-renderer.test.ts`: retry không trùng ID, giữ bản nháp khi lưu lỗi hoặc save cũ hoàn tất, tên HTML hiển thị nguyên văn, poll hiển thị/ẩn, clear cảnh báo, revision trên card, icon local/fallback kèm lý do, bỏ phản hồi reload/icon/XPath cũ, chọn theme |
+| Tích hợp service/socket | Hai `RunnerControlServer` và hai `AttentionController` thật: clear/focus A giữ nguyên cảnh báo B; CRUD, thử XPath, lưu shortcut, xóa giữ session và fault JSON/socket |
+| Build/phân phối | Các test kiểm tra bundle/assets, bridge và cấu trúc gói đã đạt; chưa chạy GUI từ bản cài |
+
+Các ca hồi quy mới đã được chạy thất bại trên code cũ trước khi sửa. Test renderer dùng Chrome headless và bridge IPC giả lập; không thay thế kiểm thử preload Electron, Zalo thật hoặc tích hợp desktop. Có thể chọn trình duyệt qua `CHROME_BIN`; test này ghi **skipped** nếu máy không có trình duyệt tương ứng.
+
+Hiệu chỉnh bằng chứng cũ: kiểm tra chuỗi trong bundle không chứng minh sandbox hoạt động; log process khởi động không chứng minh thao tác GUI; các test `manager.test.ts` cũ không chạy DOM và không tự chứng minh form giữ dữ liệu. Báo cáo ngày 2026-09-13 bên dưới được giữ làm lịch sử. Nghiệm thu desktop và GUI bản phân phối vẫn **Chưa kiểm thử**; các mục liên quan trong `tasks.md` được mở lại.
+
+Chi tiết phát hiện và bản sửa: [review Phase 5](../specs/007-phase5-manager/review.md).
+
 ## Đợt phase 5 — Manager (nhánh `007-phase5-manager`)
 
 - **Commit**: `02072c4` + thay đổi chưa commit trên nhánh (xem `git status`)

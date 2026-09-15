@@ -126,6 +126,8 @@ export interface ManagerSaveResult {
   shortcut: ShortcutSyncResult;
   /** true khi runner đang dùng bản cấu hình cũ; null khi không lấy được revision. */
   restartRequired: boolean | null;
+  /** Lý do thay icon đã mất bằng biểu tượng dự phòng, không chặn lưu profile. */
+  iconWarning?: string;
 }
 
 export type ManagerRunnerState = 'running' | 'stopped' | 'unknown';

@@ -66,39 +66,45 @@ describe('US5: chuỗi Manager đầu cuối', () => {
 
     // 3. Hai socket server và bộ điều khiển cảnh báo thật; không thay thế Electron GUI.
     for (const { profile } of [a, b]) {
-    const attention = new AttentionController({
-      profileId: profile.id, mode: 'badge_count', desktopConfig: profile.desktopConfig,
-      effects: { render: () => undefined, showPopup: () => undefined, closePopup: () => undefined }
-    });
-    attention.onObservation({ mode: 'badge_count', hasElement: true, count: 2, text: '2', changedForAlert: true, timestamp: 1 });
-    attentionControllers.push(attention);
-    const server = new RunnerControlServer(profile.id, {
-      onStatus: () => ({
-        status: 'running',
-        profileId: profile.id,
-        url: profile.url,
-        pid: DEAD_PID,
-        uptimeSeconds: 3,
-        windowState: { width: 1024, height: 768, isMaximized: false },
-        configRevision: profile.updatedAt,
-        attention: attention.getStatus()
-      }),
-      onShutdown: async () => {
-        await server.stop();
-      },
-      onClearAttention: () => ({ cleared: attention.clear() }),
-      onTestXPath: async (params) => ({
-        status: 'match',
-        selector: params.selector,
-        mode: params.mode,
-        hasElement: true,
-        count: 2,
-        textPreview: '',
-        executionTimeMs: 4
-      })
-    });
-    servers.push(server);
-    await server.start();
+      const attention = new AttentionController({
+        profileId: profile.id, mode: 'badge_count', desktopConfig: profile.desktopConfig,
+        effects: {
+          setFlash: () => undefined,
+          setBadge: () => undefined,
+          setTrayUnread: () => undefined,
+          showPopup: () => true,
+          closePopup: () => undefined
+        }
+      });
+      attention.onObservation({ mode: 'badge_count', hasElement: true, count: 2, text: '2', changedForAlert: true, timestamp: 1 });
+      attentionControllers.push(attention);
+      const server = new RunnerControlServer(profile.id, {
+        onStatus: () => ({
+          status: 'running',
+          profileId: profile.id,
+          url: profile.url,
+          pid: DEAD_PID,
+          uptimeSeconds: 3,
+          windowState: { width: 1024, height: 768, isMaximized: false },
+          configRevision: profile.updatedAt,
+          attention: attention.getStatus()
+        }),
+        onShutdown: async () => {
+          await server.stop();
+        },
+        onClearAttention: () => ({ cleared: attention.clear() }),
+        onTestXPath: async (params) => ({
+          status: 'match',
+          selector: params.selector,
+          mode: params.mode,
+          hasElement: true,
+          count: 2,
+          textPreview: '',
+          executionTimeMs: 4
+        })
+      });
+      servers.push(server);
+      await server.start();
     }
 
     // 4. Mở A từ Manager

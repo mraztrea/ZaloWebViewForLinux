@@ -291,11 +291,19 @@ export class ManagerService {
     validateSaveInput(input);
     const raw = input;
     if (raw.id !== undefined) this.assertProfileAvailable(assertValidProfileId(raw.id));
-    const icon = asOptionalString(raw.iconPath);
+    let icon = asOptionalString(raw.iconPath);
+    let iconWarning: string | undefined;
     if (icon && icon !== this.deps.fallbackIconPath) {
       try {
-        const relative = path.relative(fs.realpathSync(this.deps.iconDir), fs.realpathSync(icon));
+        const relative = path.relative(path.resolve(this.deps.iconDir), icon);
         if (!path.isAbsolute(icon) || !relative || relative.startsWith('..') || path.isAbsolute(relative)) throw new Error();
+        if (!fs.existsSync(icon)) {
+          icon = this.deps.fallbackIconPath;
+          iconWarning = 'Biểu tượng đã mất, dùng biểu tượng dự phòng.';
+        } else {
+          const realRelative = path.relative(fs.realpathSync(this.deps.iconDir), fs.realpathSync(icon));
+          if (!realRelative || realRelative.startsWith('..') || path.isAbsolute(realRelative)) throw new Error();
+        }
       } catch {
         throw new ManagerError('VALIDATION_ERROR', 'Hãy chọn hoặc tải lại biểu tượng trong vùng icon của ứng dụng.');
       }
@@ -311,7 +319,7 @@ export class ManagerService {
         saved = this.deps.profileManager.createProfile({
           name: raw.name,
           url: raw.url,
-          iconPath: asOptionalString(raw.iconPath),
+          iconPath: icon,
           userAgent: asOptionalString(raw.userAgent),
           xpathConfig: raw.xpathConfig as Profile['xpathConfig'],
           desktopConfig: raw.desktopConfig as Profile['desktopConfig']
@@ -330,7 +338,7 @@ export class ManagerService {
           desktopConfig?: Profile['desktopConfig'];
         } = { name: raw.name, url: raw.url };
         // userAgent bất biến khi sửa: luôn giữ giá trị cũ, bỏ qua renderer gửi.
-        if (Object.hasOwn(raw, 'iconPath')) updates.iconPath = asOptionalString(raw.iconPath);
+        if (Object.hasOwn(raw, 'iconPath')) updates.iconPath = icon;
         if (raw.xpathConfig !== undefined) updates.xpathConfig = raw.xpathConfig as Profile['xpathConfig'];
         if (raw.desktopConfig !== undefined) {
           updates.desktopConfig = raw.desktopConfig as Profile['desktopConfig'];
@@ -361,7 +369,10 @@ export class ManagerService {
       shortcut = { status: 'error', path: '', message: (err as Error).message };
     }
 
-    return { profile: saved, shortcut, restartRequired: await this.checkRestartRequired(saved) };
+    return {
+      profile: saved, shortcut, restartRequired: await this.checkRestartRequired(saved),
+      ...(iconWarning ? { iconWarning } : {})
+    };
     } finally { this.busyProfiles.delete(saved.id); }
   }
 

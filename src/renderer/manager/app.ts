@@ -17,6 +17,9 @@ interface ManagerState {
 const state: ManagerState = { profiles: [], filter: '', loading: true, error: null };
 let lastFocused: HTMLElement | null = null;
 let formVersion = 0;
+let reloadVersion = 0;
+let iconRequestVersion = 0;
+let xpathRequestVersion = 0;
 let statusTimer: ReturnType<typeof setTimeout> | undefined;
 let refreshingStatus = false;
 let disposed = false;
@@ -157,6 +160,7 @@ function renderList(): void {
 }
 
 async function reloadProfiles(): Promise<void> {
+  const version = ++reloadVersion;
   const api = bridge();
   state.loading = true;
   state.error = null;
@@ -168,15 +172,18 @@ async function reloadProfiles(): Promise<void> {
     return;
   }
   try {
-    state.profiles = await api.getProfiles();
+    const profiles = await api.getProfiles();
+    if (version === reloadVersion) state.profiles = profiles;
   } catch (err: unknown) {
-    state.error = (err as Error).message;
+    if (version === reloadVersion) state.error = (err as Error).message;
   } finally {
-    state.loading = false;
-    renderList();
+    if (version === reloadVersion) {
+      state.loading = false;
+      renderList();
+    }
   }
   // Chỉ làm mới trạng thái runner khi trang đang hiển thị; không poll nền.
-  if (!document.hidden) {
+  if (version === reloadVersion && !document.hidden) {
     void refreshRunnerStates();
   }
 }
@@ -319,6 +326,7 @@ function hideIconStatus(): void {
 
 async function onChooseIcon(): Promise<void> {
   const version = formVersion;
+  const request = ++iconRequestVersion;
   const api = bridge();
   if (!api) {
     showIconStatus('Cầu nối Manager chưa sẵn sàng.');
@@ -327,7 +335,7 @@ async function onChooseIcon(): Promise<void> {
   showIconStatus('Đang mở hộp chọn file…');
   try {
     const result = await api.chooseIcon();
-    if (version !== formVersion) return;
+    if (version !== formVersion || request !== iconRequestVersion) return;
     if (!result) {
       hideIconStatus();
       return;
@@ -335,13 +343,16 @@ async function onChooseIcon(): Promise<void> {
     el<HTMLInputElement>('field-icon').value = result.path;
     showIconStatus(result.fallback ? `Dùng biểu tượng dự phòng: ${result.reason ?? ''}` : 'Đã chọn biểu tượng.');
   } catch (err: unknown) {
-    if (version !== formVersion) return;
+    if (version !== formVersion || request !== iconRequestVersion) return;
     showIconStatus(`Chọn biểu tượng thất bại: ${(err as Error).message}`);
   }
 }
 
 async function onFetchIcon(profileUrl: string): Promise<void> {
   const version = formVersion;
+  const request = ++iconRequestVersion;
+  const isCurrent = () => version === formVersion && request === iconRequestVersion
+    && profileUrl === el<HTMLInputElement>('field-url').value.trim();
   const api = bridge();
   if (!api) {
     showIconStatus('Cầu nối Manager chưa sẵn sàng.');
@@ -356,11 +367,11 @@ async function onFetchIcon(profileUrl: string): Promise<void> {
   showIconStatus('Đang tải biểu tượng từ website…');
   try {
     const result = await api.fetchIcon(profileUrl);
-    if (version !== formVersion) return;
+    if (!isCurrent()) return;
     el<HTMLInputElement>('field-icon').value = result.path;
     showIconStatus(result.fallback ? `Dùng biểu tượng dự phòng: ${result.reason ?? ''}` : 'Đã tải biểu tượng.');
   } catch (err: unknown) {
-    if (version !== formVersion) return;
+    if (!isCurrent()) return;
     showIconStatus(`Tải biểu tượng thất bại: ${(err as Error).message}`);
   }
 }
@@ -405,26 +416,22 @@ async function onSaveForm(): Promise<void> {
     }
     // Registry đã lưu kể cả khi shortcut lỗi: lần thử lại phải sửa cùng ID.
     el<HTMLInputElement>('field-id').value = result.profile.id;
+    el<HTMLInputElement>('field-icon').value = result.profile.iconPath ?? '';
     el<HTMLInputElement>('field-useragent').disabled = true;
+    if (result.iconWarning) showIconStatus(result.iconWarning);
     if (result.shortcut.status === 'error') {
       showFormError(`Đã lưu profile nhưng đồng bộ shortcut thất bại: ${result.shortcut.message}. Hãy thử lại.`);
       await reloadProfiles();
       return;
     }
-    if (result.restartRequired === true) {
-      await reloadProfiles();
-      closeForm();
-      setStatus('Đã lưu. Runner đang dùng cấu hình cũ — cần mở lại runner.', 'info');
-      return;
-    }
-    if (result.restartRequired === null) {
-      await reloadProfiles();
-      closeForm();
-      setStatus('Đã lưu. Chưa xác định được runner có cần mở lại không.', 'info');
-      return;
-    }
     await reloadProfiles();
+    if (version !== formVersion) return;
     closeForm();
+    const messages = ['Đã lưu.'];
+    if (result.restartRequired === true) messages.push('Runner đang dùng cấu hình cũ — cần mở lại runner.');
+    if (result.restartRequired === null) messages.push('Chưa xác định được runner có cần mở lại không.');
+    if (result.iconWarning) messages.push(result.iconWarning);
+    setStatus(messages.join(' '), 'info');
   } catch (err: unknown) {
     if (version !== formVersion) return;
     showFormError((err as Error).message);
@@ -435,6 +442,7 @@ async function onSaveForm(): Promise<void> {
 
 async function onTestXPath(): Promise<void> {
   const version = formVersion;
+  const request = ++xpathRequestVersion;
   const api = bridge();
   if (!api) {
     showXPathResult('Cầu nối Manager chưa sẵn sàng.');
@@ -447,6 +455,9 @@ async function onTestXPath(): Promise<void> {
   }
   const selector = el<HTMLInputElement>('field-xpath').value.trim();
   const mode = el<HTMLSelectElement>('field-mode').value as Profile['xpathConfig']['mode'];
+  const isCurrent = () => version === formVersion && request === xpathRequestVersion
+    && selector === el<HTMLInputElement>('field-xpath').value.trim()
+    && mode === el<HTMLSelectElement>('field-mode').value;
   if (!selector) {
     showXPathResult('Hãy nhập selector trước khi thử.');
     return;
@@ -454,12 +465,11 @@ async function onTestXPath(): Promise<void> {
   showXPathResult('Đang thử XPath…');
   try {
     const result = await api.testXPath(id, selector, mode);
-    if (version !== formVersion || selector !== el<HTMLInputElement>('field-xpath').value.trim()
-      || mode !== el<HTMLSelectElement>('field-mode').value) return;
+    if (!isCurrent()) return;
     const labels = { match: 'Khớp', no_match: 'Không khớp', invalid_selector: 'Sai cú pháp XPath', invalid_data: 'Dữ liệu không hợp lệ', error: 'Lỗi thực thi' };
     showXPathResult(`Kết quả: ${labels[result.status]} — ${result.error || result.textPreview || `đếm ${result.count}`}`);
   } catch (err: unknown) {
-    if (version !== formVersion) return;
+    if (!isCurrent()) return;
     showXPathResult(`Thử XPath thất bại: ${(err as Error).message}`);
   }
 }

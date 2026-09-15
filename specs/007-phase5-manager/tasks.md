@@ -20,7 +20,7 @@ description: "Danh sách task triển khai Manager Phase 5 và nghiệm thu đ�
 
 **Mục đích**: Tạo khung preload/handlers/build cho Manager mà chưa gắn logic story nào.
 
-- [X] T001 Tạo `src/preload/manager-preload.ts` expose đúng 10 API (`getProfiles`, `saveProfile`, `deleteProfile`, `launchProfile`, `toggleShortcut`, `getRunnerStatus`, `clearAttention`, `testXPath`, `chooseIcon`, `fetchIcon`, `deleteProfileSession`) qua `window.zaloview`, không expose generic invoke, `ipcRenderer` hay event.
+- [X] T001 Tạo `src/preload/manager-preload.ts` expose đúng 11 API (`getProfiles`, `saveProfile`, `deleteProfile`, `launchProfile`, `toggleShortcut`, `getRunnerStatus`, `clearAttention`, `testXPath`, `chooseIcon`, `fetchIcon`, `deleteProfileSession`) qua `window.zaloview`, không expose generic invoke, `ipcRenderer` hay event.
 - [X] T002 Nối `scripts/build.mjs` bundle `src/preload/manager-preload.ts` ra `dist/preload/manager-preload.js` và giữ copy asset `src/renderer/manager/index.html`, `styles.css`.
 - [X] T003 Chuyển `createManagerWindow` trong `src/main/index.ts` sang dùng preload Manager riêng thay vì `webview-preload.js`, giữ nguyên `sandbox: true`, `nodeIntegration: false`, `contextIsolation: true`.
 
@@ -33,7 +33,7 @@ description: "Danh sách task triển khai Manager Phase 5 và nghiệm thu đ�
 **⚠️ CRITICAL**: Không bắt đầu test hoặc implementation story trước khi phase này hoàn tất.
 
 - [X] T004 Tạo khung `src/main/manager-handlers.ts` với validate sender/main frame/URL local và payload: từ chối website, iframe, payload null/sai kiểu/trường nguy hiểm trước khi chạm storage/socket (P5-01).
-- [X] T005 [P] Mở rộng `tests/build.test.ts` kiểm tra bundle `manager-preload.js`, asset Manager và Manager sandbox không lỗi `require`/`exports`, website không thấy bridge Manager.
+- [ ] T005 [P] Mở rộng `tests/build.test.ts` kiểm tra bundle `manager-preload.js`, asset Manager và Manager sandbox không lỗi `require`/`exports`, website không thấy bridge Manager. **Đã có kiểm tra bundle; còn nghiệm thu preload trong Electron sandbox thật.**
 
 **Checkpoint**: Khung handler từ chối đúng mọi nguồn không tin cậy; build ra đủ bundle mới.
 
@@ -58,7 +58,7 @@ description: "Danh sách task triển khai Manager Phase 5 và nghiệm thu đ�
 - [X] T009 [US1] Triển khai `saveProfile` trong `src/main/manager-handlers.ts` theo whitelist chỉ "trường cho phép sửa": tạo mới sinh "định danh riêng" + timestamps ở main, cập nhật giữ ID + "thời điểm tạo" + userAgent; trả `{ profile, shortcut, restartRequired }` (bổ sung `ManagerSaveResult` vào `src/shared/types.ts` sau đối chiếu schema).
 - [X] T010 [US1] Hoàn thiện danh sách trong `src/renderer/manager/app.ts` và `index.html`: cards icon/tên/địa chỉ/trạng thái, tìm kiếm theo tên/địa chỉ, phân biệt loading/empty/error; dừng poll khi cửa sổ ẩn.
 - [X] T011 [US1] Hoàn thiện biểu mẫu thêm/sửa trong `src/renderer/manager/app.ts`: form thêm dùng defaults mô hình hiện có, form sửa nạp đủ mode/interval/icon/"năm checkbox"; lỗi lưu giữ dữ liệu; render mọi dữ liệu profile bằng `textContent`, tên chứa HTML hiện literal.
-- [X] T012 [US1] Chạy `npm run typecheck`, `npm run build` và `npm test -- tests/manager.test.ts tests/build.test.ts`; smoke Manager sandbox trên Electron thật.
+- [ ] T012 [US1] Chạy `npm run typecheck`, `npm run build` và `npm test -- tests/manager.test.ts tests/build.test.ts`; smoke Manager sandbox trên Electron thật. **Các lệnh tự động đã đạt; còn smoke Electron GUI.**
 
 **Checkpoint**: User Story 1 vận hành độc lập: CRUD + tìm kiếm đúng dữ liệu thật, giữ form khi lỗi.
 
@@ -73,7 +73,7 @@ description: "Danh sách task triển khai Manager Phase 5 và nghiệm thu đ�
 ### Tests cho User Story 2
 
 - [X] T013 [P] [US2] Test `getRunnerStatus` trong `tests/manager.test.ts`: lỗi socket trả `unknown` chứ không phải stopped; kèm `RunnerStatusData` và revision khi liên lạc được.
-- [X] T014 [P] [US2] Test launch/restore trong `tests/runner-control.test.ts`: spawn lỗi hiện rõ; mở lặp restore không tạo runner thứ hai; đóng Manager không đóng runner.
+- [ ] T014 [P] [US2] Test launch/restore trong `tests/runner-control.test.ts`: spawn lỗi hiện rõ; mở lặp restore không tạo runner thứ hai; đóng Manager không đóng runner. Đã kiểm lỗi spawn và service/socket; còn thiếu kiểm chứng vòng đời process Electron thật.
 
 ### Implementation cho User Story 2
 
@@ -141,12 +141,12 @@ description: "Danh sách task triển khai Manager Phase 5 và nghiệm thu đ�
 
 ### Tests cho User Story 5
 
-- [X] T034 [P] [US5] Tạo `tests/integration.test.ts`: chuỗi thêm A/B → mở riêng → thử XPath → cảnh báo → focus clear → shortcut → mở lặp → sửa → xóa giữ session; A focus không xóa badge B; Manager restart không đóng runner; fault JSON hỏng, lỗi ghi/mạng, runner crash, socket cũ.
+- [ ] T034 [P] [US5] Tạo `tests/integration.test.ts`: chuỗi thêm A/B → mở riêng → thử XPath → cảnh báo → focus clear → shortcut → mở lặp → sửa → xóa giữ session; A focus không xóa badge B; Manager restart không đóng runner; fault JSON hỏng, lỗi ghi/mạng, runner crash, socket cũ. **Đã có hai socket thật và attention controller; còn vòng đời/crash của tiến trình Electron thật.**
 
 ### Implementation cho User Story 5
 
-- [X] T035 [US5] Chạy từ checkout sạch `npm ci`, `npm run typecheck`, `npm run build`, `npm test`; smoke bản phân phối theo đường cài (preload/assets/runtime, sandbox thật) theo `quickstart.md` Kịch bản 6.
-- [X] T036 [US5] Thực hiện Kịch bản 1–5 trong `specs/007-phase5-manager/quickstart.md` trên desktop có sẵn (upload/download, clipboard, mic/cam grant-deny, session sau restart, tháo màn hình); mọi lỗi phát hiện chỉ đánh dấu đã sửa sau ca hồi quy + thử lại.
+- [ ] T035 [US5] Chạy từ checkout sạch `npm ci`, `npm run typecheck`, `npm run build`, `npm test`; smoke bản phân phối theo đường cài (preload/assets/runtime, sandbox thật) theo `quickstart.md` Kịch bản 6. **Còn smoke GUI bản phân phối.**
+- [ ] T036 [US5] Thực hiện Kịch bản 1–5 trong `specs/007-phase5-manager/quickstart.md` trên desktop có sẵn (upload/download, clipboard, mic/cam grant-deny, session sau restart, tháo màn hình); mọi lỗi phát hiện chỉ đánh dấu đã sửa sau ca hồi quy + thử lại. **Chưa có môi trường desktop để thực hiện.**
 - [X] T037 [US5] Ghi `docs/verification.md` với mã P4/P5, commit, phiên bản, lệnh/thao tác, kết quả và bằng chứng; điền ma trận desktop trong spec, giữ "Chưa kiểm thử" khi không truy cập display; không thay kết quả desktop bằng số lượng unit test.
 
 **Checkpoint**: Chuỗi đầu cuối có báo cáo thực; gate P5-01…P5-12 và R03–R06 đối chiếu xong.
@@ -159,7 +159,9 @@ description: "Danh sách task triển khai Manager Phase 5 và nghiệm thu đ�
 
 - [X] T038 [P] Rà soát an toàn UI trong `src/renderer/manager/` cho P5-10: label/focus/Escape/focus-return, keyboard toàn thao tác chính, CSP asset local, theme hệ thống + chọn tay trong `styles.css`.
 - [X] T039 Cập nhật `docs/installation.md` từ phase 4 theo kết quả triển khai thực tế (đường cài, chạy, fallback CLI khi tray không hiện).
-- [X] T040 Chạy toàn bộ `npm run typecheck`, `npm run build`, `npm test` và đối chiếu P5-01…P5-12 trước khi đóng phase.
+- [ ] T040 Chạy toàn bộ `npm run typecheck`, `npm run build`, `npm test` và đối chiếu P5-01…P5-12 trước khi đóng phase. **Kiểm tra tự động đạt; chưa đóng phase khi các gate desktop còn thiếu bằng chứng.**
+
+Đối chiếu lại ngày 2026-09-15: các mục còn thiếu nghiệm thu đã được mở lại; xem [review.md](review.md) và [báo cáo kiểm chứng](../../docs/verification.md).
 
 ---
 

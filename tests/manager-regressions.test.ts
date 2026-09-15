@@ -116,6 +116,17 @@ describe('Hồi quy review Phase 5', () => {
     expect((await service.saveProfile({ name: 'A', url: 'https://example.org', iconPath })).profile.iconPath).toBe(iconPath);
   });
 
+  it('icon trong vùng app bị mất không chặn lưu cấu hình', async () => {
+    const iconPath = path.join(env.dataHome, 'zaloview', 'icons', 'missing.png');
+    const profile = new ProfileManager().createProfile({ name: 'A', url: 'https://example.org', iconPath });
+    const fallback = path.resolve(__dirname, '../assets/default-icon.png');
+    const service = new ManagerService({ syncShortcut, sendCommand: stopped, fallbackIconPath: fallback });
+    const saved = await service.saveProfile({ id: profile.id, name: 'B', url: profile.url, iconPath });
+    expect(saved.profile.name).toBe('B');
+    expect(saved.profile.iconPath).toBe(fallback);
+    expect(saved).toHaveProperty('iconWarning', expect.any(String));
+  });
+
   it('không mở/sửa profile trong lúc thao tác xóa đang chờ', async () => {
     let finish!: () => void;
     const service = new ManagerService({ syncShortcut, sendCommand: stopped, appPath: '/app',

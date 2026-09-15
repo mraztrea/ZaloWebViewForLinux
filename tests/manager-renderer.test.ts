@@ -26,18 +26,22 @@ describe.skipIf(!hasChrome)('Manager renderer trên Chromium (CHROME_BIN)', () =
         const tick = () => new Promise(resolve => setTimeout(resolve, 0));
         const profiles = [];
         let failSave = false, shortcutFails = true, statusCalls = 0, cleared = [];
+        let iconWarning = 'Biểu tượng đã mất, dùng biểu tượng dự phòng.';
         let hidden = false;
         Object.defineProperty(document, 'hidden', { get: () => hidden });
-        let xpathResolve;
+        let xpathResolve, delayReload = false;
+        const pendingXpaths = [];
+        const pendingReloads = [], pendingIcons = [];
         window.zaloview = {
-          getProfiles: async () => structuredClone(profiles),
+          getProfiles: async () => delayReload ? new Promise(resolve => pendingReloads.push(resolve)) : structuredClone(profiles),
           saveProfile: async (input) => {
             if (failSave) throw new Error('disk full');
             const profile = { ...input, id: input.id || 'p-' + profiles.length,
               createdAt: '2026-01-01T00:00:00.000Z', updatedAt: 'rev-new' };
+            if (iconWarning) profile.iconPath = '/app/default-icon.png';
             const index = profiles.findIndex(p => p.id === profile.id);
             if (index === -1) profiles.push(profile); else profiles[index] = profile;
-            return { profile, shortcut: shortcutFails ? {status:'error',message:'shortcut failed'} : {status:'unchanged'}, restartRequired: true };
+            return { profile, shortcut: shortcutFails ? {status:'error',message:'shortcut failed'} : {status:'unchanged'}, restartRequired: true, iconWarning };
           },
           getRunnerStatus: async (id) => {
             statusCalls++;
@@ -47,9 +51,9 @@ describe.skipIf(!hasChrome)('Manager renderer trên Chromium (CHROME_BIN)', () =
           },
           clearAttention: async (id) => { cleared.push(id); return {cleared:true}; },
           launchProfile: async (id) => ({requested:true,profileId:id}),
-          testXPath: () => new Promise(resolve => { xpathResolve = resolve; }),
+          testXPath: () => new Promise((resolve, reject) => { xpathResolve = resolve; pendingXpaths.push({ resolve, reject }); }),
           chooseIcon: async () => ({path:${JSON.stringify(path.join(dir, 'icon #?.png'))},fallback:false}),
-          fetchIcon: async () => ({path:'/tmp/site.png',fallback:false})
+          fetchIcon: () => new Promise(resolve => pendingIcons.push(resolve))
         };
       `;
       const checks = `
@@ -63,11 +67,14 @@ describe.skipIf(!hasChrome)('Manager renderer trên Chromium (CHROME_BIN)', () =
             await tick();
             check($('field-id').value === 'p-0', 'retry phải giữ ID đã lưu');
             check($('profile-dialog').open, 'shortcut lỗi phải giữ form để retry');
+            check($('icon-status').textContent.includes(iconWarning) && $('field-icon').value === '/app/default-icon.png', 'fallback icon phải được báo và giữ trong form retry');
             shortcutFails = false;
             $('profile-form').requestSubmit();
             await tick();
             check(profiles.length === 1, 'retry không được tạo profile trùng');
             check(!$('profile-dialog').open, 'lưu thành công đóng form');
+            check($('status-bar').textContent.includes(iconWarning), 'lưu thành công vẫn báo lý do fallback icon');
+            iconWarning = undefined;
             check($('profile-list').querySelector('h3').textContent === '<b>A</b>', 'tên HTML phải là text');
             check(!$('profile-list').querySelector('b'), 'không render HTML từ tên');
             const card = $('profile-list').firstElementChild;
@@ -112,6 +119,16 @@ describe.skipIf(!hasChrome)('Manager renderer trên Chromium (CHROME_BIN)', () =
             $('field-xpath').value = '//div';
             $('btn-test-xpath').click();
             await tick();
+            $('field-xpath').value = '//span';
+            $('btn-test-xpath').click();
+            await tick();
+            pendingXpaths[1].resolve({status:'match',textPreview:'KẾT QUẢ MỚI',count:1});
+            await tick();
+            pendingXpaths[0].reject(new Error('TIMEOUT: yêu cầu cũ'));
+            await tick();
+            check($('xpath-result').textContent.includes('KẾT QUẢ MỚI'), 'lỗi XPath cũ không được ghi đè kết quả mới');
+            $('btn-test-xpath').click();
+            await tick();
             $('btn-cancel').click();
             $('btn-add-profile').click();
             xpathResolve({status:'match',textPreview:'KẾT QUẢ CŨ',count:1});
@@ -120,6 +137,40 @@ describe.skipIf(!hasChrome)('Manager renderer trên Chromium (CHROME_BIN)', () =
             const theme = $('theme-select');
             check(!!theme, 'thiếu lựa chọn theme thủ công');
             if (theme) { theme.value = 'light'; theme.dispatchEvent(new Event('change')); check(document.documentElement.dataset.theme === 'light', 'theme không áp dụng'); }
+            $('field-url').value = 'https://a.example.org';
+            $('btn-fetch-icon').click();
+            $('field-url').value = 'https://b.example.org';
+            $('btn-fetch-icon').click();
+            pendingIcons[1]({path:'/tmp/b.png',fallback:false});
+            await tick();
+            pendingIcons[0]({path:'/tmp/a.png',fallback:false});
+            await tick();
+            check($('field-icon').value === '/tmp/b.png', 'icon cũ không được ghi đè icon mới');
+            $('btn-fetch-icon').click();
+            $('btn-choose-icon').click();
+            await tick();
+            const chosenIcon = $('field-icon').value;
+            pendingIcons[2]({path:'/tmp/old.png',fallback:false});
+            await tick();
+            check($('field-icon').value === chosenIcon, 'fetch cũ không ghi đè file vừa chọn');
+            delayReload = true;
+            document.dispatchEvent(new Event('visibilitychange'));
+            document.dispatchEvent(new Event('visibilitychange'));
+            pendingReloads[1](structuredClone(profiles));
+            await tick();
+            pendingReloads[0]([]);
+            await tick();
+            check($('profile-list').querySelectorAll('.profile-card').length === 1, 'reload cũ không được ghi đè danh sách mới');
+            $('field-name').value = 'Lưu mới';
+            $('profile-form').requestSubmit();
+            await tick();
+            $('btn-cancel').click();
+            $('btn-add-profile').click();
+            $('field-name').value = 'Bản nháp mới';
+            delayReload = false;
+            pendingReloads[2](structuredClone(profiles));
+            await tick();
+            check($('profile-dialog').open && $('field-name').value === 'Bản nháp mới', 'save cũ không đóng form vừa mở trong lúc reload');
           } catch (error) { failures.push(error.stack); }
           const output = document.createElement('pre');
           output.id = 'test-result';
