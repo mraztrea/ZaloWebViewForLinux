@@ -199,6 +199,12 @@ function restoreMainWindow(): void {
   restoreRunnerWindow(mainWindow);
 }
 
+function syncAttentionFocus(): void {
+  if (!mainWindow || mainWindow.isDestroyed()) return;
+  const focused = mainWindow.isFocused() && mainWindow.isVisible() && !mainWindow.isMinimized();
+  attentionController?.setFocused(focused);
+}
+
 let managerHandlersRegistered = false;
 
 function setupManagerHandlers(): void {
@@ -351,9 +357,13 @@ function initializeRunnerDesktopIntegration(profile: Profile): void {
   }
 
   if (!mainWindow || mainWindow.isDestroyed()) return;
-  attentionController.setFocused(mainWindow.isFocused());
-  mainWindow.on('focus', () => attentionController?.setFocused(true));
-  mainWindow.on('blur', () => attentionController?.setFocused(false));
+  syncAttentionFocus();
+  mainWindow.on('focus', syncAttentionFocus);
+  mainWindow.on('blur', syncAttentionFocus);
+  mainWindow.on('minimize', syncAttentionFocus);
+  mainWindow.on('restore', syncAttentionFocus);
+  mainWindow.on('show', syncAttentionFocus);
+  mainWindow.on('hide', syncAttentionFocus);
   mainWindow.on('close', (event) => {
     if (currentProfile && canCloseToTray(currentProfile, trayManager?.isReady() ?? false, quitting)) {
       event.preventDefault();
@@ -426,6 +436,7 @@ app.whenReady().then(async () => {
       }
 
       lastXPathState = state;
+      syncAttentionFocus();
       attentionController?.onObservation(state);
     });
 

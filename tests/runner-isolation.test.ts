@@ -55,6 +55,7 @@ describe('Runner Isolation & Window Options', () => {
     expect(options.webPreferences?.nodeIntegration).toBe(false);
     expect(options.webPreferences?.sandbox).toBe(true);
     expect(options.webPreferences?.webSecurity).toBe(true);
+    expect(options.webPreferences?.backgroundThrottling).toBe(false);
     expect(options.webPreferences?.partition).toBe('persist:zaloview_acc-1');
     expect(options.webPreferences?.preload).toBe('/path/to/preload.js');
   });

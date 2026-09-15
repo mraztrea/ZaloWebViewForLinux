@@ -99,6 +99,7 @@ export function buildRunnerWindowOptions(
       nodeIntegration: false,
       sandbox: true,
       webSecurity: true,
+      backgroundThrottling: false,
       partition: getPartitionForProfile(profile.id),
       preload: preloadPath
     }

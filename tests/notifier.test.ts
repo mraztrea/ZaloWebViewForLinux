@@ -105,6 +105,19 @@ describe('AttentionController', () => {
     expect(result.effects.showPopup).toHaveBeenCalledTimes(2);
   });
 
+  it('ignores repeated focus updates without re-clearing attention', () => {
+    const result = createController(() => 0);
+    result.controller.onObservation(observation());
+
+    result.controller.setFocused(false);
+    result.controller.setFocused(false);
+    expect(result.effects.closePopup).not.toHaveBeenCalled();
+
+    result.controller.setFocused(true);
+    result.controller.setFocused(true);
+    expect(result.effects.closePopup).toHaveBeenCalledTimes(1);
+  });
+
   it('cancels a pending popup when state becomes zero', () => {
     let clock = 0;
     const result = createController(() => clock);

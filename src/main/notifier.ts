@@ -98,6 +98,7 @@ export class AttentionController {
 
   public setFocused(focused: boolean): void {
     if (this.disposed) return;
+    if (this.focused === focused) return;
     this.focused = focused;
     if (focused) this.clear();
   }
