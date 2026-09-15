@@ -22,7 +22,11 @@ function observation(overrides: Partial<XPathObservationState> = {}): XPathObser
   };
 }
 
-function createController(now: () => number, effects: Partial<AttentionEffects> = {}) {
+function createController(
+  now: () => number,
+  effects: Partial<AttentionEffects> = {},
+  mode: 'badge_count' | 'text_content' | 'existence' = 'badge_count'
+) {
   const allEffects: AttentionEffects = {
     setFlash: vi.fn(),
     setBadge: vi.fn(),
@@ -33,7 +37,7 @@ function createController(now: () => number, effects: Partial<AttentionEffects> 
   };
   const controller = new AttentionController({
     profileId: 'test-profile',
-    mode: 'badge_count',
+    mode,
     desktopConfig,
     effects: allEffects,
     now
@@ -60,6 +64,43 @@ describe('AttentionController', () => {
     expect(first.effects.showPopup).toHaveBeenCalledTimes(1);
     expect(second.effects.showPopup).not.toHaveBeenCalled();
     clock = 1;
+  });
+
+  it('shows a boolean taskbar badge for existence mode', () => {
+    const result = createController(() => 0, {}, 'existence');
+    result.controller.onObservation(observation({ mode: 'existence', count: 1, text: '1' }));
+
+    expect(result.effects.setBadge).toHaveBeenLastCalledWith(1);
+
+    result.controller.clear();
+    expect(result.effects.setBadge).toHaveBeenLastCalledWith(0);
+  });
+
+  it('shows a boolean taskbar badge for text_content mode', () => {
+    const result = createController(() => 0, {}, 'text_content');
+    result.controller.onObservation(observation({ mode: 'text_content', count: 0, text: 'xin chào' }));
+
+    expect(result.effects.setBadge).toHaveBeenLastCalledWith(1);
+  });
+
+  it('hides the badge when disabled even for existence mode', () => {
+    const setBadge = vi.fn();
+    const controller = new AttentionController({
+      profileId: 'test-profile',
+      mode: 'existence',
+      desktopConfig: { ...desktopConfig, showTaskbarBadge: false },
+      effects: {
+        setFlash: vi.fn(),
+        setBadge,
+        setTrayUnread: vi.fn(),
+        showPopup: vi.fn(() => true),
+        closePopup: vi.fn()
+      },
+      now: () => 0
+    });
+    controller.onObservation(observation({ mode: 'existence', count: 1, text: '1' }));
+
+    expect(setBadge).toHaveBeenLastCalledWith(0);
   });
 
   it('updates a decreasing count without another popup', () => {

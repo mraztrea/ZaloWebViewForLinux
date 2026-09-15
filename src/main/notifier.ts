@@ -130,9 +130,17 @@ export class AttentionController {
     };
   }
 
+  private getBadgeCount(active: boolean): number {
+    if (!active) return 0;
+    // existence/text_content chỉ là chỉ báo boolean nên cần badge > 0;
+    // badge_count dùng đúng số lượng đang hiển thị.
+    return this.mode === 'badge_count' ? this.displayCount : 1;
+  }
+
   private render(active: boolean): void {
     this.effects.setFlash(active && this.desktopConfig.flashTaskbar);
-    this.effects.setBadge(this.desktopConfig.showTaskbarBadge && active ? this.displayCount : 0);
+    const badgeCount = this.getBadgeCount(active);
+    this.effects.setBadge(this.desktopConfig.showTaskbarBadge ? badgeCount : 0);
     this.effects.setTrayUnread(active, active ? this.latestState : null);
   }
 

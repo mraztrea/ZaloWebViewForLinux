@@ -7,6 +7,7 @@ import { parseCommandLineArgs, CommandLineError, getHelpText } from './cli';
 import { ProfileManager, ProfileRegistryCorruptError } from './profile-manager';
 import { resolveProfileDataDir, resolveDataDir } from './xdg-paths';
 import { canCloseToTray, createRunnerWindow, restoreRunnerWindow } from './window-service';
+import { profileDesktopFileName } from './desktop-service';
 import { PermissionManager } from './permission-manager';
 import { RunnerControlServer } from './runner-control';
 import { AttentionController, isValidXPathObservationState } from './notifier';
@@ -150,7 +151,10 @@ if (cliArgs.mode === 'profile' && cliArgs.profileId) {
   fs.mkdirSync(profileDataDir, { recursive: true, mode: 0o700 });
   app.setPath('userData', profileDataDir);
   app.setPath('sessionData', profileDataDir);
-  app.setDesktopName(`zaloview-${profileId}`);
+  // Phải kèm hậu tố .desktop để Electron phát LauncherEntry app_uri
+  // `application://zaloview-<id>.desktop` khớp file shortcut đã cài; thiếu
+  // hậu tố khiến KDE/GNOME bỏ qua badge taskbar.
+  app.setDesktopName(profileDesktopFileName(profileId));
 } else {
   const managerDataDir = path.join(resolveDataDir(), 'manager');
   fs.mkdirSync(managerDataDir, { recursive: true, mode: 0o700 });

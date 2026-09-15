@@ -12,8 +12,17 @@ function applicationsDir(): string {
   return path.join(path.dirname(resolveDataDir()), 'applications');
 }
 
+/**
+ * Tên file `.desktop` của một profile. Dùng chung cho shortcut đã cài và
+ * `app.setDesktopName` để LauncherEntry app_uri (`application://<tên>`) khớp
+ * đúng file shortcut, nhờ đó badge taskbar hoạt động.
+ */
+export function profileDesktopFileName(profileId: string): string {
+  return `zaloview-${profileId}.desktop`;
+}
+
 function shortcutPath(profileId: string): string {
-  return path.join(applicationsDir(), `zaloview-${profileId}.desktop`);
+  return path.join(applicationsDir(), profileDesktopFileName(profileId));
 }
 
 function rejectControlCharacters(value: string, field: string): void {

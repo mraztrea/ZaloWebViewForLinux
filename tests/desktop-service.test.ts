@@ -5,7 +5,7 @@ import * as path from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { createSampleProfile, createTempXdgEnvironment, TestXdgEnvironment } from './test-utils';
 import { resolveDataDir } from '../src/main/xdg-paths';
-import { removeProfileShortcut, syncProfileShortcut } from '../src/main/desktop-service';
+import { removeProfileShortcut, syncProfileShortcut, profileDesktopFileName } from '../src/main/desktop-service';
 import { ProfileManager } from '../src/main/profile-manager';
 
 describe('Desktop shortcut service', () => {
@@ -73,6 +73,10 @@ describe('Desktop shortcut service', () => {
 
     process.env.XDG_DATA_HOME = 'relative-data-home';
     expect(resolveDataDir()).toBe(path.join(os.homedir(), '.local', 'share', 'zaloview'));
+  });
+
+  it('resolves the desktop file name with the .desktop suffix for app identity', () => {
+    expect(profileDesktopFileName('zalo-1')).toBe('zaloview-zalo-1.desktop');
   });
 
   it('creates a fixed Desktop Entry for a Vietnamese profile name', async () => {
