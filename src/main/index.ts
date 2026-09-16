@@ -218,7 +218,7 @@ function setupManagerHandlers(): void {
     appPath: app.getAppPath(),
     isPackaged: app.isPackaged,
     execPath: process.execPath,
-    launcherPath: resolveLauncherPath(),
+    launcherPath: resolveLauncherPath(app.isPackaged),
     confirmAction: async (message, detail) => {
       const result = await dialog.showMessageBox({
         type: 'warning',

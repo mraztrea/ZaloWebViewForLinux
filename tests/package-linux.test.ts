@@ -32,3 +32,50 @@ describe('Linux launcher bundle', () => {
     expect(fs.existsSync(path.join(outputDir, 'node_modules'))).toBe(false);
   });
 });
+
+const hasRpmbuild = (() => {
+  try {
+    execFileSync('rpmbuild', ['--version'], { stdio: 'ignore' });
+    return true;
+  } catch {
+    return false;
+  }
+})();
+
+describe.runIf(hasRpmbuild)('Linux RPM installer', () => {
+  const rootDir = path.resolve(__dirname, '..');
+  const tempDirs: string[] = [];
+
+  afterEach(() => {
+    for (const dir of tempDirs.splice(0)) {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it(
+    'tạo một file .rpm chứa bundle, symlink, sandbox setuid và entry menu',
+    () => {
+      const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'zaloview-rpm-'));
+      tempDirs.push(tempDir);
+      const outputFile = path.join(tempDir, 'zaloview.rpm');
+
+      execFileSync(process.execPath, [path.join(rootDir, 'scripts/package-rpm.mjs'), '--output', outputFile], {
+        cwd: rootDir,
+        stdio: 'pipe',
+        timeout: 300000
+      });
+
+      expect(fs.existsSync(outputFile)).toBe(true);
+      const files = execFileSync('rpm', ['-qlpv', outputFile], { encoding: 'utf8' });
+      expect(files).toMatch(/\/usr\/bin\/zaloview -> \/usr\/lib(64)?\/zaloview\/zaloview/);
+      expect(files).toMatch(/rwsr-xr-x\s+\d+\s+root\s+root\s+.*\/zaloview\/chrome-sandbox/);
+      expect(files).toContain('zaloview-manager.desktop');
+      expect(files).not.toContain('node_modules');
+
+      const info = execFileSync('rpm', ['-qip', outputFile], { encoding: 'utf8' });
+      expect(info).toContain('Name        : zaloview');
+      expect(info).toContain('Version     : 0.1.0');
+    },
+    300000
+  );
+});

@@ -124,8 +124,20 @@ export interface ManagerServiceDeps {
   shutdownTimeoutMs?: number;
 }
 
-/** Đường launcher cài đặt mặc định theo docs/installation.md. */
-export function resolveLauncherPath(): string {
+/**
+ * Đường launcher mặc định.
+ *
+ * - Chế độ packaged (bundle/RPM): binary đang chạy chính là launcher.
+ * - Chế độ dev (đường dẫn cài cấp người dùng theo docs/installation.md).
+ */
+export function resolveLauncherPath(isPackaged = false): string {
+  if (isPackaged) {
+    try {
+      return fs.realpathSync(process.execPath);
+    } catch {
+      return process.execPath;
+    }
+  }
   return path.join(os.homedir(), '.local', 'opt', 'zaloview', 'zaloview');
 }
 
@@ -258,7 +270,7 @@ export class ManagerService {
       sendCommand: deps.sendCommand ?? sendSocketCommand,
       syncShortcut: deps.syncShortcut ?? syncProfileShortcut,
       removeShortcut: deps.removeShortcut ?? removeProfileShortcut,
-      launcherPath: deps.launcherPath ?? resolveLauncherPath(),
+      launcherPath: deps.launcherPath ?? resolveLauncherPath(deps.isPackaged ?? false),
       spawnRunner: deps.spawnRunner ?? ((args) => defaultSpawnRunner(args, deps.execPath ?? process.execPath)),
       execPath: deps.execPath ?? process.execPath,
       appPath: deps.appPath ?? '',
