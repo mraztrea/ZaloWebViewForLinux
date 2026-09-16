@@ -11,19 +11,42 @@
   <div id="app" class="app-container">
     <header class="app-header">
       <div class="header-branding">
-        <h1 class="header-title">ZaloWebView Manager</h1>
-        <span class="header-subtitle">Quản lý phiên Webview độc lập trên Linux</span>
+        <div class="brand-badge">
+          <svg class="brand-icon" viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="2" y="3" width="20" height="14" rx="3" ry="3"></rect>
+            <line x1="8" y1="21" x2="16" y2="21"></line>
+            <line x1="12" y1="17" x2="12" y2="21"></line>
+          </svg>
+        </div>
+        <div class="brand-text">
+          <h1 class="header-title">ZaloWebView Manager</h1>
+          <span class="header-subtitle">Quản lý phiên Webview độc lập trên Linux</span>
+        </div>
       </div>
       <div class="header-actions">
-        <label>Giao diện
-          <select id="theme-select">
-            <option value="system">Theo hệ thống</option>
-            <option value="light">Sáng</option>
-            <option value="dark">Tối</option>
-          </select>
-        </label>
-        <input id="search-input" class="search-input" type="search" placeholder="Tìm theo tên hoặc địa chỉ…" aria-label="Tìm profile">
-        <button id="btn-add-profile" class="btn btn-primary" type="button">+ Thêm Profile</button>
+        <div class="theme-control">
+          <label class="theme-label" for="theme-select">Giao diện
+            <select id="theme-select" class="theme-select">
+              <option value="system">Theo hệ thống</option>
+              <option value="light">Sáng</option>
+              <option value="dark">Tối</option>
+            </select>
+          </label>
+        </div>
+        <div class="search-box">
+          <svg class="search-icon" viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="11" cy="11" r="8"></circle>
+            <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+          </svg>
+          <input id="search-input" class="search-input" type="search" placeholder="Tìm theo tên hoặc địa chỉ…" aria-label="Tìm profile">
+        </div>
+        <button id="btn-add-profile" class="btn btn-primary btn-add" type="button">
+          <svg class="btn-icon" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="12" y1="5" x2="12" y2="19"></line>
+            <line x1="5" y1="12" x2="19" y2="12"></line>
+          </svg>
+          <span>Thêm Profile</span>
+        </button>
       </div>
     </header>
 
@@ -33,59 +56,74 @@
     </main>
 
     <dialog id="profile-dialog" class="profile-dialog" aria-labelledby="dialog-title">
-      <form id="profile-form" method="dialog">
-        <h2 id="dialog-title">Thêm Profile</h2>
-        <p id="form-error" class="form-error" role="alert" hidden></p>
-        <input id="field-id" type="hidden">
-        <label class="field">
-          <span>Tên</span>
-          <input id="field-name" type="text" maxlength="120" required autocomplete="off">
-        </label>
-        <label class="field">
-          <span>Địa chỉ website</span>
-          <input id="field-url" type="url" required autocomplete="off" placeholder="https://…">
-        </label>
-        <label class="field">
-          <span>Đường dẫn biểu tượng (tùy chọn)</span>
-          <input id="field-icon" type="text" autocomplete="off">
-        </label>
-        <div class="icon-actions">
-          <button id="btn-choose-icon" class="btn btn-small" type="button">Chọn file…</button>
-          <button id="btn-fetch-icon" class="btn btn-small" type="button">Tải từ website</button>
+      <form id="profile-form" class="dialog-form" method="dialog">
+        <div class="dialog-header">
+          <h2 id="dialog-title">Thêm Profile</h2>
         </div>
-        <p id="icon-status" class="icon-status" role="status" aria-live="polite" hidden></p>
-        <label class="field">
-          <span>User-Agent (chỉ đặt khi tạo mới)</span>
-          <input id="field-useragent" type="text" autocomplete="off">
-        </label>
-        <fieldset class="fieldset">
-          <legend>Theo dõi XPath</legend>
-          <label class="field">
-            <span>Selector (trống = tắt theo dõi)</span>
-            <input id="field-xpath" type="text" autocomplete="off">
-          </label>
-          <label class="field">
-            <span>Chế độ</span>
-            <select id="field-mode">
-              <option value="badge_count">Đếm badge</option>
-              <option value="text_content">Nội dung văn bản</option>
-              <option value="existence">Tồn tại phần tử</option>
-            </select>
-          </label>
-          <label class="field">
-            <span>Chu kỳ quét (ms, 1000–60000)</span>
-            <input id="field-interval" type="number" min="1000" max="60000" step="1" value="3000">
-          </label>
-        </fieldset>
-        <fieldset class="fieldset">
-          <legend>Tích hợp desktop</legend>
-          <label class="check"><input id="check-flash" type="checkbox" checked> <span>Nhấp nháy taskbar khi có tin mới</span></label>
-          <label class="check"><input id="check-badge" type="checkbox" checked> <span>Hiện số tin trên taskbar</span></label>
-          <label class="check"><input id="check-tray" type="checkbox"> <span>Thu nhỏ vào khay hệ thống</span></label>
-          <label class="check"><input id="check-notify" type="checkbox" checked> <span>Thông báo desktop</span></label>
-          <label class="check"><input id="check-shortcut" type="checkbox" checked> <span>Tạo shortcut menu ứng dụng</span></label>
-        </fieldset>
-        <div id="xpath-result" class="xpath-result" role="status" aria-live="polite" hidden></div>
+        <div class="dialog-body">
+          <p id="form-error" class="form-error" role="alert" hidden></p>
+          <input id="field-id" type="hidden">
+
+          <div class="pref-group">
+            <span class="pref-group-title">Thông tin cơ bản</span>
+            <label class="field">
+              <span>Tên</span>
+              <input id="field-name" type="text" maxlength="120" required autocomplete="off" placeholder="Ví dụ: Zalo Cá nhân, Zalo Công việc">
+            </label>
+            <label class="field">
+              <span>Địa chỉ website</span>
+              <input id="field-url" type="url" required autocomplete="off" placeholder="https://chat.zalo.me/…">
+            </label>
+            <label class="field">
+              <span>Đường dẫn biểu tượng (tùy chọn)</span>
+              <input id="field-icon" type="text" autocomplete="off" placeholder="Đường dẫn file .png/.svg hoặc URL">
+            </label>
+            <div class="icon-actions">
+              <button id="btn-choose-icon" class="btn btn-small" type="button">Chọn file…</button>
+              <button id="btn-fetch-icon" class="btn btn-small" type="button">Tải từ website</button>
+            </div>
+            <p id="icon-status" class="icon-status" role="status" aria-live="polite" hidden></p>
+            <label class="field">
+              <span>User-Agent (chỉ đặt khi tạo mới)</span>
+              <input id="field-useragent" type="text" autocomplete="off" placeholder="Mặc định theo hệ thống">
+            </label>
+          </div>
+
+          <fieldset class="fieldset pref-group">
+            <legend class="pref-group-title">Theo dõi XPath</legend>
+            <label class="field">
+              <span>Selector (trống = tắt theo dõi)</span>
+              <input id="field-xpath" type="text" autocomplete="off" placeholder="//span[contains(@class, 'badge')]">
+            </label>
+            <div class="field-row">
+              <label class="field flex-1">
+                <span>Chế độ</span>
+                <select id="field-mode">
+                  <option value="badge_count">Đếm badge</option>
+                  <option value="text_content">Nội dung văn bản</option>
+                  <option value="existence">Tồn tại phần tử</option>
+                </select>
+              </label>
+              <label class="field flex-1">
+                <span>Chu kỳ quét (ms, 1000–60000)</span>
+                <input id="field-interval" type="number" min="1000" max="60000" step="1" value="3000">
+              </label>
+            </div>
+          </fieldset>
+
+          <fieldset class="fieldset pref-group">
+            <legend class="pref-group-title">Tích hợp desktop</legend>
+            <div class="checks-grid">
+              <label class="check"><input id="check-flash" type="checkbox" checked> <span>Nhấp nháy taskbar khi có tin mới</span></label>
+              <label class="check"><input id="check-badge" type="checkbox" checked> <span>Hiện số tin trên taskbar</span></label>
+              <label class="check"><input id="check-tray" type="checkbox"> <span>Thu nhỏ vào khay hệ thống</span></label>
+              <label class="check"><input id="check-notify" type="checkbox" checked> <span>Thông báo desktop</span></label>
+              <label class="check"><input id="check-shortcut" type="checkbox" checked> <span>Tạo shortcut menu ứng dụng</span></label>
+            </div>
+          </fieldset>
+
+          <div id="xpath-result" class="xpath-result" role="status" aria-live="polite" hidden></div>
+        </div>
         <div class="dialog-actions">
           <button id="btn-test-xpath" class="btn" type="button">Thử XPath</button>
           <span class="spacer"></span>
@@ -97,7 +135,7 @@
 
     <footer class="app-footer">
       <span class="status-indicator">● Hệ thống sẵn sàng</span>
-      <span class="version-label">v0.1.0</span>
+      <span class="version-label">v0.1.0 • Linux Native</span>
     </footer>
   </div>
   <script src="app.js"></script>

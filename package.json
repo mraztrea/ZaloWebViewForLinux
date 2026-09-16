@@ -1,6 +1,6 @@
 {
   "name": "zaloview",
-  "version": "0.1.0",
+  "version": "0.2.1",
   "description": "Linux Webview Manager for isolated website profiles with XPath monitoring and desktop integration",
   "main": "dist/main/index.js",
   "bin": {

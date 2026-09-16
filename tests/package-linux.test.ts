@@ -72,9 +72,10 @@ describe.runIf(hasRpmbuild)('Linux RPM installer', () => {
       expect(files).toContain('zaloview-manager.desktop');
       expect(files).not.toContain('node_modules');
 
+      const version = (JSON.parse(fs.readFileSync(path.join(rootDir, 'package.json'), 'utf8')) as { version: string }).version;
       const info = execFileSync('rpm', ['-qip', outputFile], { encoding: 'utf8' });
       expect(info).toContain('Name        : zaloview');
-      expect(info).toContain('Version     : 0.1.0');
+      expect(info).toContain(`Version     : ${version}`);
     },
     300000
   );

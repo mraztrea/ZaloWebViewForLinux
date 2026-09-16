@@ -53,6 +53,10 @@ function makeCard(profile: Profile): HTMLElement {
   const card = document.createElement('article');
   card.className = 'profile-card';
   card.dataset.profileId = profile.id;
+  card.dataset.runnerState = 'unknown';
+
+  const cardHeader = document.createElement('div');
+  cardHeader.className = 'card-header';
 
   const icon = document.createElement('img');
   icon.className = 'profile-icon';
@@ -65,6 +69,9 @@ function makeCard(profile: Profile): HTMLElement {
     icon.src = DEFAULT_ICON;
   };
 
+  const titleGroup = document.createElement('div');
+  titleGroup.className = 'card-title-group';
+
   const title = document.createElement('h3');
   title.className = 'profile-name';
   title.textContent = profile.name;
@@ -72,6 +79,9 @@ function makeCard(profile: Profile): HTMLElement {
   const url = document.createElement('p');
   url.className = 'profile-url';
   url.textContent = profile.url;
+
+  titleGroup.append(title, url);
+  cardHeader.append(icon, titleGroup);
 
   const status = document.createElement('p');
   status.className = 'profile-status';
@@ -83,7 +93,7 @@ function makeCard(profile: Profile): HTMLElement {
 
   const openBtn = document.createElement('button');
   openBtn.type = 'button';
-  openBtn.className = 'btn btn-small';
+  openBtn.className = 'btn btn-small btn-open';
   openBtn.dataset.action = 'open';
   openBtn.textContent = 'Mở';
 
@@ -93,15 +103,9 @@ function makeCard(profile: Profile): HTMLElement {
   editBtn.dataset.action = 'edit';
   editBtn.textContent = 'Sửa';
 
-  const deleteBtn = document.createElement('button');
-  deleteBtn.type = 'button';
-  deleteBtn.className = 'btn btn-small btn-danger';
-  deleteBtn.dataset.action = 'delete';
-  deleteBtn.textContent = 'Xóa';
-
   const clearBtn = document.createElement('button');
   clearBtn.type = 'button';
-  clearBtn.className = 'btn btn-small';
+  clearBtn.className = 'btn btn-small btn-attention';
   clearBtn.dataset.action = 'clear-attention';
   clearBtn.textContent = 'Xóa cảnh báo';
   clearBtn.disabled = true;
@@ -118,18 +122,24 @@ function makeCard(profile: Profile): HTMLElement {
 
   const sessionBtn = document.createElement('button');
   sessionBtn.type = 'button';
-  sessionBtn.className = 'btn btn-small btn-danger';
+  sessionBtn.className = 'btn btn-small btn-session';
   sessionBtn.dataset.action = 'delete-session';
   sessionBtn.textContent = 'Xóa phiên';
   sessionBtn.title = 'Xóa dữ liệu phiên đăng nhập (hành động riêng, cần xác nhận)';
+
+  const deleteBtn = document.createElement('button');
+  deleteBtn.type = 'button';
+  deleteBtn.className = 'btn btn-small btn-danger';
+  deleteBtn.dataset.action = 'delete';
+  deleteBtn.textContent = 'Xóa';
 
   openBtn.addEventListener('click', () => void onOpenProfile(profile.id, status));
   editBtn.addEventListener('click', () => openForm(profile));
   deleteBtn.addEventListener('click', () => void onDeleteProfile(profile));
   sessionBtn.addEventListener('click', () => void onDeleteSession(profile));
 
-  actions.append(openBtn, editBtn, clearBtn, deleteBtn, sessionBtn);
-  card.append(icon, title, url, status, actions);
+  actions.append(openBtn, editBtn, clearBtn, sessionBtn, deleteBtn);
+  card.append(cardHeader, status, actions);
   return card;
 }
 
@@ -147,10 +157,30 @@ function renderList(): void {
   const items = filteredProfiles();
   if (state.profiles.length === 0) {
     setStatus('Chưa có profile nào. Nhấn “Thêm Profile” để bắt đầu.', 'info');
+    const empty = document.createElement('div');
+    empty.className = 'empty-state';
+    const emptyTitle = document.createElement('h3');
+    emptyTitle.className = 'empty-state-title';
+    emptyTitle.textContent = 'Chưa có Profile nào';
+    const emptyText = document.createElement('p');
+    emptyText.className = 'empty-state-text';
+    emptyText.textContent = 'Nhấn nút “+ Thêm Profile” ở trên để tạo phiên Webview độc lập đầu tiên.';
+    empty.append(emptyTitle, emptyText);
+    list.append(empty);
     return;
   }
   if (items.length === 0) {
     setStatus('Không tìm thấy profile phù hợp.', 'info');
+    const empty = document.createElement('div');
+    empty.className = 'empty-state';
+    const emptyTitle = document.createElement('h3');
+    emptyTitle.className = 'empty-state-title';
+    emptyTitle.textContent = 'Không tìm thấy kết quả';
+    const emptyText = document.createElement('p');
+    emptyText.className = 'empty-state-text';
+    emptyText.textContent = `Không có profile nào khớp với từ khóa “${state.filter}”.`;
+    empty.append(emptyTitle, emptyText);
+    list.append(empty);
     return;
   }
   setStatus(`Hiển thị ${items.length}/${state.profiles.length} profile.`, 'info');
@@ -211,17 +241,38 @@ async function refreshRunnerStates(): Promise<void> {
         const data = status.data;
         const profile = state.profiles.find((p) => p.id === id);
         const messages = [describeRunnerState(status.state)];
-        if (data?.status === 'starting') messages[0] = 'Trạng thái runner: đang khởi động';
-        if (data?.status === 'error') messages.push(`Lỗi: ${data.error ?? 'không tải được trang'}`);
-        if (status.state === 'running') {
-          if (!data?.configRevision) messages.push('Chưa xác định có cần mở lại');
-          else if (data.configRevision !== profile?.updatedAt) messages.push('Cấu hình cũ — cần mở lại runner');
-          messages.push(data?.attention?.active ? `Có cảnh báo (${data.attention.count})` : 'Không có cảnh báo');
+        let runnerState: string = status.state;
+        if (data?.status === 'starting') {
+          messages[0] = 'Trạng thái runner: đang khởi động';
+          runnerState = 'starting';
         }
+        if (data?.status === 'error') {
+          messages.push(`Lỗi: ${data.error ?? 'không tải được trang'}`);
+          runnerState = 'error';
+        }
+        if (status.state === 'running') {
+          if (!data?.configRevision) {
+            messages.push('Chưa xác định có cần mở lại');
+            card.dataset.configOutdated = 'false';
+          } else if (data.configRevision !== profile?.updatedAt) {
+            messages.push('Cấu hình cũ — cần mở lại runner');
+            card.dataset.configOutdated = 'true';
+          } else {
+            card.dataset.configOutdated = 'false';
+          }
+          messages.push(data?.attention?.active ? `Có cảnh báo (${data.attention.count})` : 'Không có cảnh báo');
+        } else {
+          card.dataset.configOutdated = 'false';
+        }
+        card.dataset.runnerState = runnerState;
+        card.dataset.hasAttention = data?.attention?.active ? 'true' : 'false';
         node.textContent = messages.join('. ');
         const clearBtn = card.querySelector<HTMLButtonElement>('[data-action="clear-attention"]');
         if (clearBtn) clearBtn.disabled = status.state !== 'running' || !data?.attention?.active;
       } catch {
+        card.dataset.runnerState = 'unknown';
+        card.dataset.hasAttention = 'false';
+        card.dataset.configOutdated = 'false';
         node.textContent = describeRunnerState('unknown');
       }
     })
