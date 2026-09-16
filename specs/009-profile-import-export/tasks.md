@@ -29,8 +29,8 @@ Single project tại gốc repo: `src/`, `tests/`.
 
 **Purpose**: Khai báo kiểu dữ liệu và hằng số nền cho mọi story.
 
-- [ ] T001 [P] Thêm các kiểu dữ liệu chuyển đổi vào `src/shared/types.ts`: `ExportedIcon { mimeType: string; data: string }`, `ExportedProfile { id; name; url; userAgent?; xpathConfig; desktopConfig; icon? }`, `ExportBundle { schemaVersion: number; exportedAt: string; profiles: ExportedProfile[] }`, `ExportResult = { cancelled: true; reason: 'CANCELLED' | 'EMPTY' } | { cancelled: false; count: number; path: string }`, `ImportReport { cancelled; addedCount; added: { id; name }[]; skipped: { id; reason: 'ID_EXISTS' | 'SESSION_DATA_EXISTS' }[]; invalid: { index: number; reason: string }[]; warnings: { id?: string; reason: 'ICON_IGNORED' | 'SHORTCUT_FAILED' }[] }`, `ParsedProfileEntry { id; name; url; userAgent?; xpathConfig; desktopConfig; iconBase64? }`.
-- [ ] T002 [P] Tạo `src/main/profile-transfer.ts` với class `ProfileTransferError extends Error`, hằng `PROFILE_EXPORT_SCHEMA_VERSION = 1` và `MAX_IMPORT_FILE_BYTES = 20 * 1024 * 1024`; module không import `electron`, không chạm FS.
+- [X] T001 [P] Thêm các kiểu dữ liệu chuyển đổi vào `src/shared/types.ts`: `ExportedIcon { mimeType: string; data: string }`, `ExportedProfile { id; name; url; userAgent?; xpathConfig; desktopConfig; icon? }`, `ExportBundle { schemaVersion: number; exportedAt: string; profiles: ExportedProfile[] }`, `ExportResult = { cancelled: true; reason: 'CANCELLED' | 'EMPTY' } | { cancelled: false; count: number; path: string }`, `ImportReport { cancelled; addedCount; added: { id; name }[]; skipped: { id; reason: 'ID_EXISTS' | 'SESSION_DATA_EXISTS' }[]; invalid: { index: number; reason: string }[]; warnings: { id?: string; reason: 'ICON_IGNORED' | 'SHORTCUT_FAILED' }[] }`, `ParsedProfileEntry { id; name; url; userAgent?; xpathConfig; desktopConfig; iconBase64? }`.
+- [X] T002 [P] Tạo `src/main/profile-transfer.ts` với class `ProfileTransferError extends Error`, hằng `PROFILE_EXPORT_SCHEMA_VERSION = 1` và `MAX_IMPORT_FILE_BYTES = 20 * 1024 * 1024`; module không import `electron`, không chạm FS.
 
 ---
 
@@ -40,10 +40,10 @@ Single project tại gốc repo: `src/`, `tests/`.
 
 **⚠️ CRITICAL**: Không story nào bắt đầu được trước khi xong phase này.
 
-- [ ] T003 Mở rộng `ManagerServiceDeps` trong `src/main/manager-handlers.ts` với `showSaveDialog?: (defaultName: string) => Promise<string | null>` và `showJsonOpenDialog?: () => Promise<string | null>`; thêm giá trị mặc định trong constructor (`showSaveDialog ?? (async () => null)`, `showJsonOpenDialog ?? (async () => null)`); giữ nguyên `showOpenDialog` cũ cho luồng icon.
-- [ ] T004 Thêm `exportProfiles: 'zaloview:export-profiles'` và `importProfiles: 'zaloview:import-profiles'` vào `MANAGER_CHANNELS` trong `src/main/manager-handlers.ts`.
-- [ ] T005 Wire hai dep hộp thoại trong `src/main/index.ts` (`setupManagerHandlers`): `showSaveDialog` dùng `dialog.showSaveDialog({ defaultPath, filters: [{ name: 'JSON', extensions: ['json'] }] })`, `showJsonOpenDialog` dùng `dialog.showOpenDialog({ properties: ['openFile'], filters: [{ name: 'JSON', extensions: ['json'] }] })`, trả `null` khi hủy (phụ thuộc T003).
-- [ ] T006 [P] Thêm `exportProfiles(): Promise<ExportResult>` và `importProfiles(): Promise<ImportReport>` vào `ManagerBridgeApi` và object `api` trong `src/preload/manager-preload.ts`, gọi `ipcRenderer.invoke('zaloview:export-profiles')` / `ipcRenderer.invoke('zaloview:import-profiles')` (import kiểu từ `../shared/types`).
+- [X] T003 Mở rộng `ManagerServiceDeps` trong `src/main/manager-handlers.ts` với `showSaveDialog?: (defaultName: string) => Promise<string | null>` và `showJsonOpenDialog?: () => Promise<string | null>`; thêm giá trị mặc định trong constructor (`showSaveDialog ?? (async () => null)`, `showJsonOpenDialog ?? (async () => null)`); giữ nguyên `showOpenDialog` cũ cho luồng icon.
+- [X] T004 Thêm `exportProfiles: 'zaloview:export-profiles'` và `importProfiles: 'zaloview:import-profiles'` vào `MANAGER_CHANNELS` trong `src/main/manager-handlers.ts`.
+- [X] T005 Wire hai dep hộp thoại trong `src/main/index.ts` (`setupManagerHandlers`): `showSaveDialog` dùng `dialog.showSaveDialog({ defaultPath, filters: [{ name: 'JSON', extensions: ['json'] }] })`, `showJsonOpenDialog` dùng `dialog.showOpenDialog({ properties: ['openFile'], filters: [{ name: 'JSON', extensions: ['json'] }] })`, trả `null` khi hủy (phụ thuộc T003).
+- [X] T006 [P] Thêm `exportProfiles(): Promise<ExportResult>` và `importProfiles(): Promise<ImportReport>` vào `ManagerBridgeApi` và object `api` trong `src/preload/manager-preload.ts`, gọi `ipcRenderer.invoke('zaloview:export-profiles')` / `ipcRenderer.invoke('zaloview:import-profiles')` (import kiểu từ `../shared/types`).
 
 **Checkpoint**: Hợp đồng bridge + dep hộp thoại sẵn sàng — bắt đầu được US1/US2.
 
@@ -57,15 +57,15 @@ Single project tại gốc repo: `src/`, `tests/`.
 
 ### Tests for User Story 1
 
-- [ ] T007 [P] [US1] Viết unit test cho `buildExportBundle` trong `tests/profile-transfer.test.ts`: giữ `id/name/url/userAgent/xpathConfig/desktopConfig`; bỏ `createdAt`, `updatedAt`, `iconPath`; profile có icon đọc được → có `icon.data`; `iconReader` trả `null` → bỏ icon mà không lỗi; `exportedAt`/`schemaVersion=1` đúng; mảng rỗng → `profiles: []`. Test phải FAIL trước T008.
+- [X] T007 [P] [US1] Viết unit test cho `buildExportBundle` trong `tests/profile-transfer.test.ts`: giữ `id/name/url/userAgent/xpathConfig/desktopConfig`; bỏ `createdAt`, `updatedAt`, `iconPath`; profile có icon đọc được → có `icon.data`; `iconReader` trả `null` → bỏ icon mà không lỗi; `exportedAt`/`schemaVersion=1` đúng; mảng rỗng → `profiles: []`. Test phải FAIL trước T008.
 
 ### Implementation for User Story 1
 
-- [ ] T008 [US1] Cài `buildExportBundle(profiles, iconReader, now?)` trong `src/main/profile-transfer.ts` per `research.md` Q4 và `data-model.md` mục 2–3 (không xuất `createdAt`/`updatedAt`/`iconPath`; `iconReader` trả `Buffer | null`).
-- [ ] T009 [US1] Cài `ManagerService.exportProfiles()` trong `src/main/manager-handlers.ts`: đọc registry (lỗi → `ManagerError('REGISTRY_CORRUPT')`), registry rỗng → trả `{ cancelled: true, reason: 'EMPTY' }`; gọi `showSaveDialog('zaloview-profiles-YYYYMMDD.json')`, hủy → `{ cancelled: true, reason: 'CANCELLED' }`; `buildExportBundle` với `iconReader` đọc file trong `this.deps.iconDir` (kiểm tra đường dẫn nằm trong `iconDir`, lỗi → `null`); ghi bằng `atomicWriteFile`, lỗi → `ManagerError('EXPORT_WRITE_FAILED', ...)`; trả `{ cancelled: false, count, path }`.
-- [ ] T010 [US1] Đăng ký handler `MANAGER_CHANNELS.exportProfiles` trong `registerManagerHandlers` (`src/main/manager-handlers.ts`): gọi `guard(event)` rồi `service.exportProfiles()`, không nhận tham số payload.
-- [ ] T011 [US1] Thêm nút "Xuất" (`id="btn-export-profiles"`) vào `header-actions` trong `src/renderer/manager/index.html`; trong `src/renderer/manager/app.ts` thêm `onExportProfiles()` gọi `bridge().exportProfiles()`, disable nút khi đang chờ, `setStatus` báo "Đã xuất N profile tới <path>.", xử lý `reason === 'EMPTY'` ("Chưa có profile nào để xuất.") và lỗi; thêm style nút phụ trong `src/renderer/manager/styles.css` nếu cần.
-- [ ] T012 [US1] Viết test service cho `exportProfiles` trong `tests/manager.test.ts` (theo pattern temp XDG + dialog giả): hủy dialog không ghi tệp; registry rỗng trả `reason: 'EMPTY'`; thành công ghi tệp và trả `count`/`path` đúng.
+- [X] T008 [US1] Cài `buildExportBundle(profiles, iconReader, now?)` trong `src/main/profile-transfer.ts` per `research.md` Q4 và `data-model.md` mục 2–3 (không xuất `createdAt`/`updatedAt`/`iconPath`; `iconReader` trả `Buffer | null`).
+- [X] T009 [US1] Cài `ManagerService.exportProfiles()` trong `src/main/manager-handlers.ts`: đọc registry (lỗi → `ManagerError('REGISTRY_CORRUPT')`), registry rỗng → trả `{ cancelled: true, reason: 'EMPTY' }`; gọi `showSaveDialog('zaloview-profiles-YYYYMMDD.json')`, hủy → `{ cancelled: true, reason: 'CANCELLED' }`; `buildExportBundle` với `iconReader` đọc file trong `this.deps.iconDir` (kiểm tra đường dẫn nằm trong `iconDir`, lỗi → `null`); ghi bằng `atomicWriteFile`, lỗi → `ManagerError('EXPORT_WRITE_FAILED', ...)`; trả `{ cancelled: false, count, path }`.
+- [X] T010 [US1] Đăng ký handler `MANAGER_CHANNELS.exportProfiles` trong `registerManagerHandlers` (`src/main/manager-handlers.ts`): gọi `guard(event)` rồi `service.exportProfiles()`, không nhận tham số payload.
+- [X] T011 [US1] Thêm nút "Xuất" (`id="btn-export-profiles"`) vào `header-actions` trong `src/renderer/manager/index.html`; trong `src/renderer/manager/app.ts` thêm `onExportProfiles()` gọi `bridge().exportProfiles()`, disable nút khi đang chờ, `setStatus` báo "Đã xuất N profile tới <path>.", xử lý `reason === 'EMPTY'` ("Chưa có profile nào để xuất.") và lỗi; thêm style nút phụ trong `src/renderer/manager/styles.css` nếu cần.
+- [X] T012 [US1] Viết test service cho `exportProfiles` trong `tests/manager.test.ts` (theo pattern temp XDG + dialog giả): hủy dialog không ghi tệp; registry rỗng trả `reason: 'EMPTY'`; thành công ghi tệp và trả `count`/`path` đúng.
 
 **Checkpoint**: US1 chạy và kiểm thử độc lập được (KB-1, KB-2, KB-3 trong quickstart.md).
 
@@ -79,15 +79,15 @@ Single project tại gốc repo: `src/`, `tests/`.
 
 ### Tests for User Story 2
 
-- [ ] T013 [P] [US2] Viết unit test cho `parseImportBundle` trong `tests/profile-transfer.test.ts`: happy path map đúng `ParsedProfileEntry`; JSON hỏng / `schemaVersion: 2` / `profiles` không phải mảng → ném `ProfileTransferError`; mục thiếu `name`, `url: 'ftp://x'`, `xpathConfig.mode` lạ, `pollIntervalMs` ngoài 1000–60000, `desktopConfig.flashTaskbar` không boolean → vào `invalid` kèm `index`; trường lạ bị bỏ qua; `icon` thiếu `mimeType`/`data` → bỏ icon im lặng; mảng rỗng → `entries: []`. Test phải FAIL trước T014.
+- [X] T013 [P] [US2] Viết unit test cho `parseImportBundle` trong `tests/profile-transfer.test.ts`: happy path map đúng `ParsedProfileEntry`; JSON hỏng / `schemaVersion: 2` / `profiles` không phải mảng → ném `ProfileTransferError`; mục thiếu `name`, `url: 'ftp://x'`, `xpathConfig.mode` lạ, `pollIntervalMs` ngoài 1000–60000, `desktopConfig.flashTaskbar` không boolean → vào `invalid` kèm `index`; trường lạ bị bỏ qua; `icon` thiếu `mimeType`/`data` → bỏ icon im lặng; mảng rỗng → `entries: []`. Test phải FAIL trước T014.
 
 ### Implementation for User Story 2
 
-- [ ] T014 [US2] Cài `parseImportBundle(raw)` trong `src/main/profile-transfer.ts`: parse JSON (lỗi → `ProfileTransferError`), kiểm tra `schemaVersion === PROFILE_EXPORT_SCHEMA_VERSION` và `profiles` là mảng (sai → ném); mỗi mục dùng `validateProfile` để chuẩn hóa rồi map sang `ParsedProfileEntry`; mục lỗi gom vào `invalid` với `index`; chỉ nhận `icon` khi `mimeType` và `data` là chuỗi phi rỗng.
-- [ ] T015 [US2] Cài `ManagerService.importProfiles()` trong `src/main/manager-handlers.ts`: `showJsonOpenDialog()` hủy → `{ cancelled: true, addedCount: 0, added: [], skipped: [], invalid: [], warnings: [] }`; `fs.statSync` chặn file > `MAX_IMPORT_FILE_BYTES` → `ManagerError('IMPORT_FILE_TOO_LARGE')`; đọc UTF-8 + `parseImportBundle`, lỗi cấu trúc → `ManagerError('IMPORT_INVALID_FILE')`; với mỗi entry: ID đã có → `skipped: 'ID_EXISTS'`; có icon → `Buffer.from(iconBase64, 'base64')`, chặn > `ICON_MAX_BYTES`, `storeIconBuffer` trả `fallback` → `warnings: 'ICON_IGNORED'` và `iconPath = undefined`; gọi `profileManager.createProfile` (bắt `ProfileDataExistsError` → `skipped: 'SESSION_DATA_EXISTS'`; `ProfileValidationError`/`ProfileDuplicateIdError` → `invalid`); thành công → `addedCount++`, gọi `syncShortcut` trong try/catch (lỗi → `warnings: 'SHORTCUT_FAILED'`).
-- [ ] T016 [US2] Đăng ký handler `MANAGER_CHANNELS.importProfiles` trong `registerManagerHandlers` (`src/main/manager-handlers.ts`): `guard(event)` rồi `service.importProfiles()`, không nhận tham số payload.
-- [ ] T017 [US2] Thêm nút "Nhập" (`id="btn-import-profiles"`) vào `header-actions` trong `src/renderer/manager/index.html`; trong `src/renderer/manager/app.ts` thêm `onImportProfiles()` gọi `bridge().importProfiles()`, disable nút khi chờ, im lặng khi hủy, `setStatus` tóm tắt "Đã thêm N profile, bỏ qua M, không hợp lệ K." và gọi `void reloadProfiles()` khi `addedCount > 0`.
-- [ ] T018 [US2] Viết test service cho `importProfiles` trong `tests/manager.test.ts`: hủy dialog không đổi registry; file hợp lệ → thêm đủ, `addedCount` đúng; ID trùng → `skipped: 'ID_EXISTS'`; JSON hỏng/`schemaVersion` sai → ném và registry giữ nguyên; file quá lớn → `IMPORT_FILE_TOO_LARGE`.
+- [X] T014 [US2] Cài `parseImportBundle(raw)` trong `src/main/profile-transfer.ts`: parse JSON (lỗi → `ProfileTransferError`), kiểm tra `schemaVersion === PROFILE_EXPORT_SCHEMA_VERSION` và `profiles` là mảng (sai → ném); mỗi mục dùng `validateProfile` để chuẩn hóa rồi map sang `ParsedProfileEntry`; mục lỗi gom vào `invalid` với `index`; chỉ nhận `icon` khi `mimeType` và `data` là chuỗi phi rỗng.
+- [X] T015 [US2] Cài `ManagerService.importProfiles()` trong `src/main/manager-handlers.ts`: `showJsonOpenDialog()` hủy → `{ cancelled: true, addedCount: 0, added: [], skipped: [], invalid: [], warnings: [] }`; `fs.statSync` chặn file > `MAX_IMPORT_FILE_BYTES` → `ManagerError('IMPORT_FILE_TOO_LARGE')`; đọc UTF-8 + `parseImportBundle`, lỗi cấu trúc → `ManagerError('IMPORT_INVALID_FILE')`; với mỗi entry: ID đã có → `skipped: 'ID_EXISTS'`; có icon → `Buffer.from(iconBase64, 'base64')`, chặn > `ICON_MAX_BYTES`, `storeIconBuffer` trả `fallback` → `warnings: 'ICON_IGNORED'` và `iconPath = undefined`; gọi `profileManager.createProfile` (bắt `ProfileDataExistsError` → `skipped: 'SESSION_DATA_EXISTS'`; `ProfileValidationError`/`ProfileDuplicateIdError` → `invalid`); thành công → `addedCount++`, gọi `syncShortcut` trong try/catch (lỗi → `warnings: 'SHORTCUT_FAILED'`).
+- [X] T016 [US2] Đăng ký handler `MANAGER_CHANNELS.importProfiles` trong `registerManagerHandlers` (`src/main/manager-handlers.ts`): `guard(event)` rồi `service.importProfiles()`, không nhận tham số payload.
+- [X] T017 [US2] Thêm nút "Nhập" (`id="btn-import-profiles"`) vào `header-actions` trong `src/renderer/manager/index.html`; trong `src/renderer/manager/app.ts` thêm `onImportProfiles()` gọi `bridge().importProfiles()`, disable nút khi chờ, im lặng khi hủy, `setStatus` tóm tắt "Đã thêm N profile, bỏ qua M, không hợp lệ K." và gọi `void reloadProfiles()` khi `addedCount > 0`.
+- [X] T018 [US2] Viết test service cho `importProfiles` trong `tests/manager.test.ts`: hủy dialog không đổi registry; file hợp lệ → thêm đủ, `addedCount` đúng; ID trùng → `skipped: 'ID_EXISTS'`; JSON hỏng/`schemaVersion` sai → ném và registry giữ nguyên; file quá lớn → `IMPORT_FILE_TOO_LARGE`.
 
 **Checkpoint**: US1 + US2 chạy và kiểm thử độc lập (KB-4, KB-5, KB-7, KB-9, KB-10).
 
@@ -101,8 +101,8 @@ Single project tại gốc repo: `src/`, `tests/`.
 
 ### Implementation for User Story 3
 
-- [ ] T019 [US3] Mở rộng `onImportProfiles()` trong `src/renderer/manager/app.ts` để ngoài tóm tắt còn dựng danh sách chi tiết `skipped` (ID + lý do), `invalid` (vị trí + lý do) và `warnings` (ICON_IGNORED/SHORTCUT_FAILED, kèm ID nếu có) bằng `textContent` (không dùng `innerHTML`); thêm style danh sách báo cáo trong `src/renderer/manager/styles.css`.
-- [ ] T020 [US3] Viết test shape báo cáo trong `tests/manager.test.ts`: profile có icon nhúng hỏng → `warnings` chứa `ICON_IGNORED` và profile vẫn được thêm không icon; `syncShortcut` ném lỗi → `warnings` chứa `SHORTCUT_FAILED` và profile vẫn tồn tại; `invalid` chứa đúng `index` của mục lỗi.
+- [X] T019 [US3] Mở rộng `onImportProfiles()` trong `src/renderer/manager/app.ts` để ngoài tóm tắt còn dựng danh sách chi tiết `skipped` (ID + lý do), `invalid` (vị trí + lý do) và `warnings` (ICON_IGNORED/SHORTCUT_FAILED, kèm ID nếu có) bằng `textContent` (không dùng `innerHTML`); thêm style danh sách báo cáo trong `src/renderer/manager/styles.css`.
+- [X] T020 [US3] Viết test shape báo cáo trong `tests/manager.test.ts`: profile có icon nhúng hỏng → `warnings` chứa `ICON_IGNORED` và profile vẫn được thêm không icon; `syncShortcut` ném lỗi → `warnings` chứa `SHORTCUT_FAILED` và profile vẫn tồn tại; `invalid` chứa đúng `index` của mục lỗi.
 
 **Checkpoint**: Cả 3 story hoạt động độc lập; báo cáo đầy đủ (KB-6, KB-8, KB-11).
 
@@ -112,8 +112,8 @@ Single project tại gốc repo: `src/`, `tests/`.
 
 **Purpose**: Kiểm chứng đầu cuối và ghi nhận kết quả.
 
-- [ ] T021 [P] Ghi kết quả kiểm chứng tính năng vào `docs/verification.md` (mục mới cho 009: lệnh đã chạy, kết quả, các KB đã thực hiện).
-- [ ] T022 Chạy `npm run typecheck` và `npm test`; sửa mọi lỗi kiểu/test phát sinh cho tới khi sạch.
+- [X] T021 [P] Ghi kết quả kiểm chứng tính năng vào `docs/verification.md` (mục mới cho 009: lệnh đã chạy, kết quả, các KB đã thực hiện).
+- [X] T022 Chạy `npm run typecheck` và `npm test`; sửa mọi lỗi kiểu/test phát sinh cho tới khi sạch.
 - [ ] T023 Chạy các kịch bản thủ công KB-1…KB-11 trong `specs/009-profile-import-export/quickstart.md` và ghi lại kết quả quan sát.
 
 ---

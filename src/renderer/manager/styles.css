@@ -431,6 +431,45 @@ body {
   display: none;
 }
 
+.import-report {
+  margin-bottom: 16px;
+  padding: 12px 14px;
+  border-radius: var(--radius-md);
+  background-color: var(--surface-card);
+  border: 1px solid var(--border-color);
+  box-shadow: var(--shadow-sm);
+  font-size: 12.5px;
+  color: var(--text-secondary);
+}
+
+.import-report[hidden] {
+  display: none;
+}
+
+.import-report-summary {
+  margin: 0;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.import-report-heading {
+  margin: 10px 0 4px;
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+
+.import-report-list {
+  margin: 0;
+  padding-left: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.import-report-list li {
+  line-height: 1.5;
+}
+
 /* ==========================================================================
    Profile Grid & Cards (Modern Adwaita Card)
    ========================================================================== */

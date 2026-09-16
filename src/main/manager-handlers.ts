@@ -19,6 +19,8 @@ import { createRequire } from 'node:module';
 import { ProfileManager } from './profile-manager';
 import { validateProfileId, validateProfileName, validateProfileUrl, validateXPathConfig, validateDesktopConfig } from './profile-validator';
 import { resolveDataDir, resolveProfileDataDir, resolveSocketPath } from './xdg-paths';
+import { atomicWriteFile } from './atomic-writer';
+import { buildExportBundle, parseImportBundle, MAX_IMPORT_FILE_BYTES, type ParseImportResult } from './profile-transfer';
 import { sendSocketCommand } from './runner-control';
 import { removeProfileShortcut, syncProfileShortcut } from './desktop-service';
 import {
@@ -30,6 +32,8 @@ import {
   type ImageDecoder
 } from './icon-fetcher';
 import type {
+  ExportResult,
+  ImportReport,
   ManagerRunnerStatus,
   ManagerSaveResult,
   Profile,
@@ -54,7 +58,9 @@ export const MANAGER_CHANNELS = {
   testXPath: 'zaloview:test-xpath',
   chooseIcon: 'zaloview:choose-icon',
   fetchIcon: 'zaloview:fetch-icon',
-  deleteProfileSession: 'zaloview:delete-profile-session'
+  deleteProfileSession: 'zaloview:delete-profile-session',
+  exportProfiles: 'zaloview:export-profiles',
+  importProfiles: 'zaloview:import-profiles'
 } as const;
 
 export class ManagerError extends Error {
@@ -116,6 +122,8 @@ export interface ManagerServiceDeps {
   sleep?: (ms: number) => Promise<void>;
   confirmAction?: (message: string, detail: string) => Promise<boolean>;
   showOpenDialog?: () => Promise<string | null>;
+  showSaveDialog?: (defaultName: string) => Promise<string | null>;
+  showJsonOpenDialog?: () => Promise<string | null>;
   decodeImage?: ImageDecoder;
   fetchImpl?: typeof fetch;
   iconDir?: string;
@@ -221,6 +229,14 @@ function notImplemented(method: string): never {
   throw new ManagerError('NOT_IMPLEMENTED', `Phương thức ${method} chưa được triển khai.`);
 }
 
+/** Tên tệp xuất dạng zaloview-profiles-YYYYMMDD.json. */
+function formatDateStamp(date: Date): string {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}${month}${day}`;
+}
+
 export interface ManagerFrameRef {
   url?: string;
 }
@@ -279,6 +295,8 @@ export class ManagerService {
       sleep: deps.sleep ?? defaultSleep,
       confirmAction: deps.confirmAction ?? (async () => false),
       showOpenDialog: deps.showOpenDialog ?? (async () => null),
+      showSaveDialog: deps.showSaveDialog ?? (async () => null),
+      showJsonOpenDialog: deps.showJsonOpenDialog ?? (async () => null),
       decodeImage: deps.decodeImage ?? defaultDecodeImage,
       fetchImpl: deps.fetchImpl ?? fetch,
       iconDir: deps.iconDir ?? path.join(resolveDataDir(), 'icons'),
@@ -525,6 +543,164 @@ export class ManagerService {
         `Chưa xác định được runner "${id}" đã dừng. Dữ liệu được giữ lại.`
       );
     }
+  }
+
+  /**
+   * Xuất toàn bộ cấu hình profile ra một tệp JSON. Chỉ cấu hình, không kèm dữ
+   * liệu phiên; icon được nhúng base64. Danh sách rỗng thì không ghi tệp.
+   */
+  public async exportProfiles(): Promise<ExportResult> {
+    let profiles: Profile[];
+    try {
+      profiles = this.deps.profileManager.loadRegistry().profiles;
+    } catch (err: unknown) {
+      throw mapRegistryError(err, 'Không thể đọc danh sách profile');
+    }
+
+    if (profiles.length === 0) {
+      return { cancelled: true, reason: 'EMPTY' };
+    }
+
+    const target = await this.deps.showSaveDialog(
+      `zaloview-profiles-${formatDateStamp(new Date())}.json`
+    );
+    if (!target) return { cancelled: true, reason: 'CANCELLED' };
+
+    const bundle = buildExportBundle(profiles, (iconPath) => this.readIconBuffer(iconPath));
+    try {
+      atomicWriteFile(target, JSON.stringify(bundle, null, 2));
+    } catch (err: unknown) {
+      throw new ManagerError('EXPORT_WRITE_FAILED', `Không thể ghi tệp xuất: ${(err as Error).message}`);
+    }
+
+    return { cancelled: false, count: profiles.length, path: target };
+  }
+
+  /** Đọc icon trong vùng icon của ứng dụng; mọi lỗi/đường dẫn ngoài vùng đều trả null. */
+  private readIconBuffer(iconPath: string): Buffer | null {
+    try {
+      const iconRoot = fs.realpathSync(this.deps.iconDir);
+      const resolved = path.resolve(iconPath);
+      const relative = path.relative(iconRoot, resolved);
+      if (!relative || relative.startsWith('..') || path.isAbsolute(relative)) return null;
+      const realRelative = path.relative(iconRoot, fs.realpathSync(resolved));
+      if (!realRelative || realRelative.startsWith('..') || path.isAbsolute(realRelative)) return null;
+      const buffer = fs.readFileSync(resolved);
+      return buffer.length > 0 ? buffer : null;
+    } catch {
+      return null;
+    }
+  }
+
+  /**
+   * Nhập danh sách profile từ tệp JSON. Chỉ thêm profile mới, bỏ qua profile
+   * trùng ID hoặc không hợp lệ; trả báo cáo chi tiết cho người dùng.
+   */
+  public async importProfiles(): Promise<ImportReport> {
+    const report: ImportReport = {
+      cancelled: false,
+      addedCount: 0,
+      added: [],
+      skipped: [],
+      invalid: [],
+      warnings: []
+    };
+
+    const filePath = await this.deps.showJsonOpenDialog();
+    if (!filePath) return { ...report, cancelled: true };
+
+    let size: number;
+    try {
+      size = fs.statSync(filePath).size;
+    } catch (err: unknown) {
+      throw new ManagerError('IMPORT_INVALID_FILE', `Không thể đọc tệp: ${(err as Error).message}`);
+    }
+    if (size > MAX_IMPORT_FILE_BYTES) {
+      throw new ManagerError(
+        'IMPORT_FILE_TOO_LARGE',
+        `Tệp vượt quá giới hạn ${Math.floor(MAX_IMPORT_FILE_BYTES / (1024 * 1024))} MiB.`
+      );
+    }
+
+    let content: string;
+    try {
+      content = fs.readFileSync(filePath, 'utf-8');
+    } catch (err: unknown) {
+      throw new ManagerError('IMPORT_INVALID_FILE', `Không thể đọc tệp: ${(err as Error).message}`);
+    }
+
+    let parsed: ParseImportResult;
+    try {
+      parsed = parseImportBundle(content);
+    } catch (err: unknown) {
+      throw new ManagerError('IMPORT_INVALID_FILE', (err as Error).message);
+    }
+
+    let existingIds: Set<string>;
+    try {
+      existingIds = new Set(this.deps.profileManager.loadRegistry().profiles.map((p) => p.id));
+    } catch (err: unknown) {
+      throw mapRegistryError(err, 'Không thể đọc danh sách profile');
+    }
+
+    report.invalid.push(...parsed.invalid);
+
+    for (const entry of parsed.entries) {
+      if (existingIds.has(entry.id)) {
+        report.skipped.push({ id: entry.id, reason: 'ID_EXISTS' });
+        continue;
+      }
+
+      let iconPath: string | undefined;
+      if (entry.iconBase64) {
+        const buffer = Buffer.from(entry.iconBase64, 'base64');
+        if (buffer.length === 0 || buffer.length > ICON_MAX_BYTES) {
+          report.warnings.push({ id: entry.id, reason: 'ICON_IGNORED' });
+        } else {
+          const stored = this.storeIconBuffer(buffer);
+          if (stored.fallback) {
+            report.warnings.push({ id: entry.id, reason: 'ICON_IGNORED' });
+          } else {
+            iconPath = stored.path;
+          }
+        }
+      }
+
+      let saved: Profile;
+      try {
+        saved = this.deps.profileManager.createProfile({
+          id: entry.id,
+          name: entry.name,
+          url: entry.url,
+          iconPath,
+          userAgent: entry.userAgent,
+          xpathConfig: entry.xpathConfig,
+          desktopConfig: entry.desktopConfig
+        });
+      } catch (err: unknown) {
+        const name = (err as Error).name ?? '';
+        if (name === 'ProfileDataExistsError') {
+          report.skipped.push({ id: entry.id, reason: 'SESSION_DATA_EXISTS' });
+        } else if (name === 'ProfileValidationError' || name === 'ProfileDuplicateIdError') {
+          report.invalid.push({ index: entry.index, reason: (err as Error).message });
+        } else {
+          throw mapRegistryError(err, 'Không thể tạo profile khi nhập');
+        }
+        continue;
+      }
+
+      existingIds.add(saved.id);
+      report.addedCount++;
+      report.added.push({ id: saved.id, name: saved.name });
+
+      try {
+        await this.deps.syncShortcut(saved, this.deps.launcherPath);
+      } catch {
+        report.warnings.push({ id: saved.id, reason: 'SHORTCUT_FAILED' });
+      }
+    }
+
+    return report;
   }
 
   public async launchProfile(profileId: string): Promise<LaunchResult> {
@@ -944,6 +1120,14 @@ export function registerManagerHandlers(
   ipc.handle(MANAGER_CHANNELS.deleteProfileSession, (event, profileId: unknown) => {
     guard(event);
     return service.deleteProfileSession(assertValidProfileId(profileId));
+  });
+  ipc.handle(MANAGER_CHANNELS.exportProfiles, (event) => {
+    guard(event);
+    return service.exportProfiles();
+  });
+  ipc.handle(MANAGER_CHANNELS.importProfiles, (event) => {
+    guard(event);
+    return service.importProfiles();
   });
 }
 

@@ -81,7 +81,8 @@ vẫn được thêm không icon), `SHORTCUT_FAILED` (đồng bộ shortcut desk
 
 Kết quả `parseImportBundle` trả về các mục đã qua kiểm tra, sẵn sàng để tạo
 profile. Gồm các trường của `ExportedProfile` (không có `icon`), thay bằng
-`iconBase64?: string`.
+`iconBase64?: string`, kèm `index: number` là vị trí trong mảng `profiles` của
+tệp (dùng để báo lỗi khi tạo profile ở tầng service).
 
 ## 7. Sơ đồ chuyển đổi
 

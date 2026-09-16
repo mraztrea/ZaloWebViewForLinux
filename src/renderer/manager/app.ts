@@ -3,7 +3,7 @@
  * Chạy trong sandbox cô lập (sandbox: true, nodeIntegration: false).
  * Mọi dữ liệu profile render bằng textContent — không dùng innerHTML.
  */
-import type { Profile } from '../../shared/types';
+import type { ImportReport, Profile } from '../../shared/types';
 
 type Bridge = Window['zaloview'];
 
@@ -573,8 +573,102 @@ async function onDeleteSession(profile: Profile): Promise<void> {
   }
 }
 
+async function onExportProfiles(): Promise<void> {
+  const api = bridge();
+  if (!api) {
+    setStatus('Cầu nối Manager chưa sẵn sàng.', 'error');
+    return;
+  }
+  const btn = el<HTMLButtonElement>('btn-export-profiles');
+  btn.disabled = true;
+  try {
+    const result = await api.exportProfiles();
+    if (result.cancelled) {
+      if (result.reason === 'EMPTY') setStatus('Chưa có profile nào để xuất.', 'info');
+      return;
+    }
+    setStatus(`Đã xuất ${result.count} profile tới ${result.path}.`, 'info');
+  } catch (err: unknown) {
+    setStatus(`Xuất danh sách thất bại: ${(err as Error).message}`, 'error');
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+const IMPORT_SKIP_LABELS: Record<string, string> = {
+  ID_EXISTS: 'ID đã tồn tại',
+  SESSION_DATA_EXISTS: 'còn dữ liệu phiên trên đĩa'
+};
+
+const IMPORT_WARN_LABELS: Record<string, string> = {
+  ICON_IGNORED: 'bỏ qua icon (không hợp lệ)',
+  SHORTCUT_FAILED: 'đồng bộ shortcut thất bại'
+};
+
+function renderImportReport(report: ImportReport): void {
+  const container = el('import-report');
+  container.textContent = '';
+
+  const summary = document.createElement('p');
+  summary.className = 'import-report-summary';
+  summary.textContent =
+    `Đã thêm ${report.addedCount} profile · bỏ qua ${report.skipped.length} · ` +
+    `không hợp lệ ${report.invalid.length} · cảnh báo ${report.warnings.length}`;
+  container.append(summary);
+
+  const addList = (title: string, lines: string[]): void => {
+    if (!lines.length) return;
+    const heading = document.createElement('p');
+    heading.className = 'import-report-heading';
+    heading.textContent = title;
+    const list = document.createElement('ul');
+    list.className = 'import-report-list';
+    for (const line of lines) {
+      const item = document.createElement('li');
+      item.textContent = line;
+      list.append(item);
+    }
+    container.append(heading, list);
+  };
+
+  addList('Bỏ qua', report.skipped.map((item) => `${item.id} — ${IMPORT_SKIP_LABELS[item.reason] ?? item.reason}`));
+  addList('Không hợp lệ', report.invalid.map((item) => `Mục #${item.index + 1} — ${item.reason}`));
+  addList(
+    'Cảnh báo',
+    report.warnings.map((item) => `${item.id ? `${item.id} — ` : ''}${IMPORT_WARN_LABELS[item.reason] ?? item.reason}`)
+  );
+
+  container.hidden = false;
+}
+
+async function onImportProfiles(): Promise<void> {
+  const api = bridge();
+  if (!api) {
+    setStatus('Cầu nối Manager chưa sẵn sàng.', 'error');
+    return;
+  }
+  const btn = el<HTMLButtonElement>('btn-import-profiles');
+  const reportNode = el('import-report');
+  reportNode.hidden = true;
+  reportNode.textContent = '';
+  btn.disabled = true;
+  try {
+    const report = await api.importProfiles();
+    if (report.cancelled) return;
+    if (report.addedCount > 0) await reloadProfiles();
+    renderImportReport(report);
+    setStatus(`Đã thêm ${report.addedCount} profile.`, report.invalid.length ? 'error' : 'info');
+  } catch (err: unknown) {
+    setStatus(`Nhập danh sách thất bại: ${(err as Error).message}`, 'error');
+  } finally {
+    btn.disabled = false;
+  }
+}
+
 document.addEventListener('DOMContentLoaded', () => {
   el('btn-add-profile').addEventListener('click', () => openForm(null));
+  el('btn-import-profiles').addEventListener('click', () => void onImportProfiles());
+  el('btn-export-profiles').addEventListener('click', () => void onExportProfiles());
   el('search-input').addEventListener('input', (event) => {
     state.filter = (event.target as HTMLInputElement).value;
     renderList();

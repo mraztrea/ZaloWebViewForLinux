@@ -40,6 +40,22 @@
           </svg>
           <input id="search-input" class="search-input" type="search" placeholder="Tìm theo tên hoặc địa chỉ…" aria-label="Tìm profile">
         </div>
+        <button id="btn-import-profiles" class="btn" type="button" title="Nhập danh sách profile từ tệp JSON">
+          <svg class="btn-icon" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+            <polyline points="17 8 12 3 7 8"></polyline>
+            <line x1="12" y1="3" x2="12" y2="15"></line>
+          </svg>
+          <span>Nhập</span>
+        </button>
+        <button id="btn-export-profiles" class="btn" type="button" title="Xuất toàn bộ danh sách profile ra tệp JSON">
+          <svg class="btn-icon" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+            <polyline points="7 10 12 15 17 10"></polyline>
+            <line x1="12" y1="15" x2="12" y2="3"></line>
+          </svg>
+          <span>Xuất</span>
+        </button>
         <button id="btn-add-profile" class="btn btn-primary btn-add" type="button">
           <svg class="btn-icon" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
             <line x1="12" y1="5" x2="12" y2="19"></line>
@@ -52,6 +68,7 @@
 
     <main class="app-main">
       <div id="status-bar" class="status-bar" role="status" aria-live="polite"></div>
+      <div id="import-report" class="import-report" role="status" aria-live="polite" hidden></div>
       <div id="profile-list" class="profile-grid"></div>
     </main>
 
