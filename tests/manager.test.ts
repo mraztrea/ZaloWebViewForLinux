@@ -787,3 +787,279 @@ describe('ManagerService US4: deleteProfileSession (P5-08)', () => {
     await expect(service.deleteProfileSession('..')).rejects.toThrow(/VALIDATION_ERROR/);
   });
 });
+
+describe('ManagerService US1: exportProfiles (Phase 9)', () => {
+  let env: TestXdgEnvironment;
+  const originalEnv = { ...process.env };
+
+  beforeEach(() => {
+    env = createTempXdgEnvironment();
+    process.env.XDG_CONFIG_HOME = env.configHome;
+    process.env.XDG_DATA_HOME = env.dataHome;
+    process.env.XDG_RUNTIME_DIR = env.runtimeDir;
+  });
+
+  afterEach(() => {
+    process.env = { ...originalEnv };
+    env.cleanup();
+  });
+
+  it('hủy hộp thoại thì không ghi tệp và giữ nguyên dữ liệu', async () => {
+    const service = new ManagerService({
+      syncShortcut: (async () => ({ status: 'unchanged' as const, path: '/tmp/x.desktop' })) as never,
+      showSaveDialog: async () => null
+    });
+    await service.saveProfile({ name: 'A', url: 'https://a.vn' });
+    await expect(service.exportProfiles()).resolves.toEqual({ cancelled: true, reason: 'CANCELLED' });
+  });
+
+  it('danh sách rỗng trả EMPTY và không mở hộp thoại lưu', async () => {
+    let called = false;
+    const service = new ManagerService({
+      showSaveDialog: async () => {
+        called = true;
+        return path.join(env.tempRoot, 'x.json');
+      }
+    });
+    await expect(service.exportProfiles()).resolves.toEqual({ cancelled: true, reason: 'EMPTY' });
+    expect(called).toBe(false);
+  });
+
+  it('ghi tệp JSON đủ cấu hình, nhúng icon base64 và bỏ iconPath/timestamps', async () => {
+    const iconDir = path.join(env.dataHome, 'zaloview', 'icons');
+    fs.mkdirSync(iconDir, { recursive: true });
+    const iconPath = path.join(iconDir, 'icon-test.png');
+    fs.writeFileSync(iconPath, Buffer.from([1, 2, 3, 4]), 'utf-8');
+
+    const service = new ManagerService({
+      syncShortcut: (async () => ({ status: 'unchanged' as const, path: '/tmp/x.desktop' })) as never,
+      showSaveDialog: async () => path.join(env.tempRoot, 'out.json')
+    });
+    const saved = await service.saveProfile({
+      name: 'Zalo A',
+      url: 'https://chat.zalo.me',
+      userAgent: 'UA-1',
+      iconPath
+    });
+
+    const result = await service.exportProfiles();
+    expect(result.cancelled).toBe(false);
+    if (result.cancelled) throw new Error('unreachable');
+    expect(result.count).toBe(1);
+    expect(result.path).toBe(path.join(env.tempRoot, 'out.json'));
+
+    const bundle = JSON.parse(fs.readFileSync(result.path, 'utf-8'));
+    expect(bundle.schemaVersion).toBe(1);
+    expect(typeof bundle.exportedAt).toBe('string');
+    expect(bundle.profiles).toHaveLength(1);
+    const entry = bundle.profiles[0];
+    expect(entry.id).toBe(saved.profile.id);
+    expect(entry.userAgent).toBe('UA-1');
+    expect(entry.icon).toEqual({ mimeType: 'image/png', data: Buffer.from([1, 2, 3, 4]).toString('base64') });
+    expect(entry.iconPath).toBeUndefined();
+    expect(entry.createdAt).toBeUndefined();
+    expect(entry.updatedAt).toBeUndefined();
+  });
+});
+
+describe('ManagerService US2: importProfiles (Phase 9)', () => {
+  let env: TestXdgEnvironment;
+  const originalEnv = { ...process.env };
+
+  beforeEach(() => {
+    env = createTempXdgEnvironment();
+    process.env.XDG_CONFIG_HOME = env.configHome;
+    process.env.XDG_DATA_HOME = env.dataHome;
+    process.env.XDG_RUNTIME_DIR = env.runtimeDir;
+  });
+
+  afterEach(() => {
+    process.env = { ...originalEnv };
+    env.cleanup();
+  });
+
+  function writeBundle(profiles: unknown[]): string {
+    const file = path.join(env.tempRoot, `import-${Math.random().toString(36).slice(2)}.json`);
+    fs.writeFileSync(file, JSON.stringify({ schemaVersion: 1, exportedAt: 'x', profiles }), 'utf-8');
+    return file;
+  }
+
+  function profileEntry(overrides: Record<string, unknown> = {}): Record<string, unknown> {
+    return {
+      id: 'nhap-a',
+      name: 'Nhập A',
+      url: 'https://chat.zalo.me',
+      xpathConfig: { selector: '//div', mode: 'badge_count', pollIntervalMs: 3000 },
+      desktopConfig: {
+        flashTaskbar: true,
+        showTaskbarBadge: true,
+        minimizeToTray: false,
+        showDesktopNotification: true,
+        createDesktopShortcut: true
+      },
+      ...overrides
+    };
+  }
+
+  function makeService(filePath: string | null, sync = vi.fn(async () => ({ status: 'unchanged' as const, path: '/tmp/x.desktop' }))) {
+    return new ManagerService({ showJsonOpenDialog: async () => filePath, syncShortcut: sync as never });
+  }
+
+  it('hủy hộp thoại không đổi registry', async () => {
+    const service = makeService(null);
+    await expect(service.importProfiles()).resolves.toMatchObject({ cancelled: true, addedCount: 0 });
+    await expect(service.getProfiles()).resolves.toEqual([]);
+  });
+
+  it('thêm profile hợp lệ với đầy đủ cấu hình, bỏ qua trùng ID', async () => {
+    const service = makeService(writeBundle([profileEntry(), profileEntry({ id: 'nhap-b', name: 'Nhập B' })]));
+    const report = await service.importProfiles();
+    expect(report.cancelled).toBe(false);
+    expect(report.addedCount).toBe(2);
+    expect(report.added.map((item) => item.id)).toEqual(['nhap-a', 'nhap-b']);
+    expect(report.skipped).toEqual([]);
+
+    const again = makeService(writeBundle([profileEntry(), profileEntry({ id: 'nhap-c', name: 'Nhập C' })]));
+    const second = await again.importProfiles();
+    expect(second.addedCount).toBe(1);
+    expect(second.skipped).toEqual([{ id: 'nhap-a', reason: 'ID_EXISTS' }]);
+
+    const profiles = await again.getProfiles();
+    const added = profiles.find((p) => p.id === 'nhap-a');
+    expect(added?.name).toBe('Nhập A');
+    expect(added?.xpathConfig).toEqual({ selector: '//div', mode: 'badge_count', pollIntervalMs: 3000 });
+  });
+
+  it('file sai cấu trúc bị từ chối và registry giữ nguyên', async () => {
+    const service = makeService(writeBundle([]));
+    const badJson = path.join(env.tempRoot, 'bad.json');
+    fs.writeFileSync(badJson, '{hong', 'utf-8');
+    await expect(makeService(badJson).importProfiles()).rejects.toThrow(/IMPORT_INVALID_FILE/);
+
+    const badVersion = path.join(env.tempRoot, 'bad-version.json');
+    fs.writeFileSync(badVersion, JSON.stringify({ schemaVersion: 2, profiles: [] }), 'utf-8');
+    await expect(makeService(badVersion).importProfiles()).rejects.toThrow(/IMPORT_INVALID_FILE/);
+    await expect(service.getProfiles()).resolves.toEqual([]);
+  });
+
+  it('file vượt giới hạn kích thước bị từ chối', async () => {
+    const big = path.join(env.tempRoot, 'big.json');
+    fs.writeFileSync(big, Buffer.alloc(20 * 1024 * 1024 + 1));
+    await expect(makeService(big).importProfiles()).rejects.toThrow(/IMPORT_FILE_TOO_LARGE/);
+  });
+
+  it('ID còn thư mục phiên mồ côi bị bỏ qua kèm lý do', async () => {
+    const orphanDir = path.join(env.dataHome, 'zaloview', 'profiles', 'nhap-a');
+    fs.mkdirSync(orphanDir, { recursive: true });
+    const service = makeService(writeBundle([profileEntry()]));
+    const report = await service.importProfiles();
+    expect(report.addedCount).toBe(0);
+    expect(report.skipped).toEqual([{ id: 'nhap-a', reason: 'SESSION_DATA_EXISTS' }]);
+  });
+});
+
+describe('ManagerService US3: importProfiles báo cáo (Phase 9)', () => {
+  let env: TestXdgEnvironment;
+  const originalEnv = { ...process.env };
+
+  beforeEach(() => {
+    env = createTempXdgEnvironment();
+    process.env.XDG_CONFIG_HOME = env.configHome;
+    process.env.XDG_DATA_HOME = env.dataHome;
+    process.env.XDG_RUNTIME_DIR = env.runtimeDir;
+  });
+
+  afterEach(() => {
+    process.env = { ...originalEnv };
+    env.cleanup();
+  });
+
+  function writeBundle(profiles: unknown[]): string {
+    const file = path.join(env.tempRoot, `import-${Math.random().toString(36).slice(2)}.json`);
+    fs.writeFileSync(file, JSON.stringify({ schemaVersion: 1, exportedAt: 'x', profiles }), 'utf-8');
+    return file;
+  }
+
+  function profileEntry(overrides: Record<string, unknown> = {}): Record<string, unknown> {
+    return {
+      id: 'nhap-a',
+      name: 'Nhập A',
+      url: 'https://chat.zalo.me',
+      xpathConfig: { selector: '//div', mode: 'badge_count', pollIntervalMs: 3000 },
+      desktopConfig: {
+        flashTaskbar: true,
+        showTaskbarBadge: true,
+        minimizeToTray: false,
+        showDesktopNotification: true,
+        createDesktopShortcut: true
+      },
+      ...overrides
+    };
+  }
+
+  const syncOk = (async () => ({ status: 'unchanged' as const, path: '/tmp/x.desktop' })) as never;
+
+  it('icon không giải mã được bị bỏ qua nhưng profile vẫn được thêm, kèm cảnh báo', async () => {
+    const icon = Buffer.from([1, 2, 3]).toString('base64');
+    const file = writeBundle([profileEntry({ icon: { mimeType: 'image/png', data: icon } })]);
+    const service = new ManagerService({
+      showJsonOpenDialog: async () => file,
+      syncShortcut: syncOk,
+      decodeImage: () => null
+    });
+
+    const report = await service.importProfiles();
+
+    expect(report.addedCount).toBe(1);
+    expect(report.warnings).toEqual([{ id: 'nhap-a', reason: 'ICON_IGNORED' }]);
+    const profiles = await service.getProfiles();
+    expect(profiles[0].iconPath).toBeUndefined();
+  });
+
+  it('icon vượt 2 MiB bị bỏ qua trước khi giải mã', async () => {
+    const huge = Buffer.alloc(2 * 1024 * 1024 + 1).toString('base64');
+    const file = writeBundle([profileEntry({ icon: { mimeType: 'image/png', data: huge } })]);
+    const service = new ManagerService({
+      showJsonOpenDialog: async () => file,
+      syncShortcut: syncOk,
+      decodeImage: () => {
+        throw new Error('decodeImage không được gọi cho icon vượt giới hạn');
+      }
+    });
+
+    const report = await service.importProfiles();
+
+    expect(report.addedCount).toBe(1);
+    expect(report.warnings).toEqual([{ id: 'nhap-a', reason: 'ICON_IGNORED' }]);
+  });
+
+  it('đồng bộ shortcut lỗi chỉ ghi cảnh báo, profile vẫn tồn tại', async () => {
+    const file = writeBundle([profileEntry()]);
+    const service = new ManagerService({
+      showJsonOpenDialog: async () => file,
+      syncShortcut: (async () => {
+        throw new Error('boom');
+      }) as never
+    });
+
+    const report = await service.importProfiles();
+
+    expect(report.addedCount).toBe(1);
+    expect(report.warnings).toEqual([{ id: 'nhap-a', reason: 'SHORTCUT_FAILED' }]);
+    await expect(service.getProfiles()).resolves.toHaveLength(1);
+  });
+
+  it('mục không hợp lệ giữ đúng index trong tệp', async () => {
+    const file = writeBundle([profileEntry({ id: 'ok' }), profileEntry({ id: 'bad', url: 'ftp://x' })]);
+    const service = new ManagerService({ showJsonOpenDialog: async () => file, syncShortcut: syncOk });
+
+    const report = await service.importProfiles();
+
+    expect(report.addedCount).toBe(1);
+    expect(report.invalid).toHaveLength(1);
+    expect(report.invalid[0].index).toBe(1);
+  });
+});
+
+
+

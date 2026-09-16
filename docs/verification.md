@@ -2,6 +2,35 @@
 
 Tài liệu này chỉ ghi kết quả quan sát thực tế. Môi trường không truy cập được giữ nguyên "Chưa kiểm thử".
 
+## Đợt 009 — Nhập/Xuất danh sách và cấu hình Profile (`009-profile-import-export`)
+
+- **Trạng thái mã nguồn**: thay đổi trên working tree nhánh `009-profile-import-export` (chưa commit).
+- **Môi trường**: Linux desktop có `DISPLAY=:0`/`WAYLAND_DISPLAY=wayland-0`, Node `v22.23.1`, Electron `44.3.0`, Vitest `3.2.7`.
+- **Ngày chạy**: 2026-09-16.
+
+### Lệnh đã chạy và kết quả
+
+| Lệnh | Kết quả |
+|---|---|
+| `npm run typecheck` | PASS — không lỗi kiểu |
+| `npm test` (full suite) | PASS — **24 tệp, 208 test, 0 bỏ qua** |
+
+### Bằng chứng tự động
+
+| Phạm vi | Bằng chứng quan sát |
+|---|---|
+| Dựng/kiểm tra payload thuần | `profile-transfer.test.ts` (7 test): `buildExportBundle` giữ cấu hình, bỏ `createdAt`/`updatedAt`/`iconPath`, nhúng icon base64, bỏ icon khi không đọc được; `parseImportBundle` từ chối JSON hỏng/`schemaVersion` sai/`profiles` không phải mảng, gom mục lỗi kèm `index`, bỏ icon thiếu trường |
+| Xuất qua service | `manager.test.ts` (US1): hủy hộp thoại không ghi tệp; registry rỗng trả `reason: 'EMPTY'` và không mở hộp thoại; ghi tệp JSON đúng `count`/`path`, nhúng icon, không có `iconPath`/timestamps |
+| Nhập qua service | `manager.test.ts` (US2): hủy không đổi registry; thêm đủ cấu hình; trùng ID trả `ID_EXISTS`; file sai cấu trúc ném `IMPORT_INVALID_FILE` và giữ nguyên registry; file > 20 MiB ném `IMPORT_FILE_TOO_LARGE`; thư mục phiên mồ côi trả `SESSION_DATA_EXISTS` |
+| Báo cáo nhập | `manager.test.ts` (US3): icon không giải mã được → `ICON_IGNORED`, profile vẫn thêm không icon; icon > 2 MiB bị bỏ trước khi giải mã; `syncShortcut` lỗi → `SHORTCUT_FAILED`, profile vẫn tồn tại; mục lỗi giữ đúng `index` |
+| DOM renderer | `manager-renderer.test.ts` PASS: nạp thật `src/renderer/manager/index.html` + bundle `app.ts`; việc renderer tìm thấy `#btn-import-profiles`/`#btn-export-profiles` và gắn listener chứng minh hai nút tồn tại trong DOM |
+
+### Chưa kiểm thử
+
+- **KB-1…KB-11** trong `specs/009-profile-import-export/quickstart.md`: các kịch bản cần thao tác hộp thoại native (chọn nơi lưu/chọn tệp) và quan sát GUI, không tự động hóa được trong phiên này. Trạng thái: **Chưa kiểm thử**.
+- Nghiệm thu shortcut desktop thật sau khi nhập (KB-11) trên KDE/GNOME: **Chưa kiểm thử**.
+
+
 ## Đợt review và sửa Phase 5 — 2026-09-15
 
 - Mã nguồn: `6938513` cùng các sửa tiếp theo trong working tree của nhánh `007-phase5-manager`; phạm vi review từ `844cbbc`.

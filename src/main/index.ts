@@ -237,6 +237,22 @@ function setupManagerHandlers(): void {
       });
       if (result.canceled) return null;
       return result.filePaths[0] ?? null;
+    },
+    showSaveDialog: async (defaultName) => {
+      const result = await dialog.showSaveDialog({
+        defaultPath: defaultName,
+        filters: [{ name: 'JSON', extensions: ['json'] }]
+      });
+      if (result.canceled) return null;
+      return result.filePath ?? null;
+    },
+    showJsonOpenDialog: async () => {
+      const result = await dialog.showOpenDialog({
+        properties: ['openFile'],
+        filters: [{ name: 'JSON', extensions: ['json'] }]
+      });
+      if (result.canceled) return null;
+      return result.filePaths[0] ?? null;
     }
   });
   registerManagerHandlers(

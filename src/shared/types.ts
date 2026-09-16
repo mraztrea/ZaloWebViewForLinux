@@ -164,6 +164,59 @@ export interface ProfileRegistry {
 }
 
 /**
+ * Profile Import/Export contracts (Phase 9).
+ * Tệp xuất chỉ chứa cấu hình; không chứa dữ liệu phiên đăng nhập.
+ */
+export interface ExportedIcon {
+  mimeType: string;
+  data: string; // base64
+}
+
+export interface ExportedProfile {
+  id: string;
+  name: string;
+  url: string;
+  userAgent?: string;
+  xpathConfig: XPathConfig;
+  desktopConfig: DesktopIntegrationConfig;
+  icon?: ExportedIcon;
+}
+
+export interface ExportBundle {
+  schemaVersion: number;
+  exportedAt: string;
+  profiles: ExportedProfile[];
+}
+
+export type ExportResult =
+  | { cancelled: true; reason: 'CANCELLED' | 'EMPTY' }
+  | { cancelled: false; count: number; path: string };
+
+export type ImportSkipReason = 'ID_EXISTS' | 'SESSION_DATA_EXISTS';
+export type ImportWarnReason = 'ICON_IGNORED' | 'SHORTCUT_FAILED';
+
+export interface ImportReport {
+  cancelled: boolean;
+  addedCount: number;
+  added: { id: string; name: string }[];
+  skipped: { id: string; reason: ImportSkipReason }[];
+  invalid: { index: number; reason: string }[];
+  warnings: { id?: string; reason: ImportWarnReason }[];
+}
+
+export interface ParsedProfileEntry {
+  /** Vị trí trong mảng profiles của tệp, dùng để báo lỗi khi tạo profile. */
+  index: number;
+  id: string;
+  name: string;
+  url: string;
+  userAgent?: string;
+  xpathConfig: XPathConfig;
+  desktopConfig: DesktopIntegrationConfig;
+  iconBase64?: string;
+}
+
+/**
  * Permissions Store
  */
 export interface PermissionRecord {

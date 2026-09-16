@@ -7,6 +7,8 @@
  */
 import { contextBridge, ipcRenderer } from 'electron';
 import type {
+  ExportResult,
+  ImportReport,
   ManagerRunnerStatus,
   ManagerSaveResult,
   Profile,
@@ -68,6 +70,8 @@ export interface ManagerBridgeApi {
   chooseIcon(): Promise<IconResult | null>;
   fetchIcon(url: string): Promise<IconResult>;
   deleteProfileSession(profileId: string): Promise<DeleteSessionResult>;
+  exportProfiles(): Promise<ExportResult>;
+  importProfiles(): Promise<ImportReport>;
 }
 
 const api: ManagerBridgeApi = {
@@ -83,7 +87,9 @@ const api: ManagerBridgeApi = {
     ipcRenderer.invoke('zaloview:test-xpath', profileId, selector, mode),
   chooseIcon: () => ipcRenderer.invoke('zaloview:choose-icon'),
   fetchIcon: (url: string) => ipcRenderer.invoke('zaloview:fetch-icon', url),
-  deleteProfileSession: (profileId: string) => ipcRenderer.invoke('zaloview:delete-profile-session', profileId)
+  deleteProfileSession: (profileId: string) => ipcRenderer.invoke('zaloview:delete-profile-session', profileId),
+  exportProfiles: () => ipcRenderer.invoke('zaloview:export-profiles'),
+  importProfiles: () => ipcRenderer.invoke('zaloview:import-profiles')
 };
 
 contextBridge.exposeInMainWorld('zaloview', api);
