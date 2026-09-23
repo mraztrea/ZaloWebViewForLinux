@@ -34,6 +34,8 @@ export interface CreateRunnerWindowOptions {
   profile: Profile;
   windowState: WindowState;
   preloadPath: string;
+  /** Đường dẫn icon PNG của ứng dụng; tùy chọn vì dev environment có thể thiếu. */
+  appIconPath?: string;
   permissionManager?: PermissionManager;
   onWindowStateChange?: (newState: WindowState) => void;
 }
@@ -84,7 +86,8 @@ export function getPartitionForProfile(profileId: string): string {
 export function buildRunnerWindowOptions(
   profile: Profile,
   windowState: WindowState,
-  preloadPath: string
+  preloadPath: string,
+  appIconPath?: string
 ): BrowserWindowConstructorOptions {
   return {
     width: windowState.width,
@@ -93,6 +96,7 @@ export function buildRunnerWindowOptions(
     y: windowState.y,
     title: profile.name,
     autoHideMenuBar: true,
+    icon: appIconPath,
     show: false, // Show after ready-to-show to prevent visual flicker
     webPreferences: {
       contextIsolation: true,
@@ -107,8 +111,7 @@ export function buildRunnerWindowOptions(
 }
 
 export function createRunnerWindow(options: CreateRunnerWindowOptions): BrowserWindow {
-  const { profile, windowState, preloadPath, permissionManager, onWindowStateChange } = options;
-
+  const { profile, windowState, preloadPath, appIconPath, permissionManager, onWindowStateChange } = options;
   let currentNormalBounds = {
     x: windowState.x,
     y: windowState.y,
@@ -134,7 +137,8 @@ export function createRunnerWindow(options: CreateRunnerWindowOptions): BrowserW
   const winOptions = buildRunnerWindowOptions(
     profile,
     { ...currentNormalBounds, isMaximized: windowState.isMaximized },
-    preloadPath
+    preloadPath,
+    appIconPath
   );
 
   const win = new BrowserWindow(winOptions);

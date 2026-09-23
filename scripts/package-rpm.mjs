@@ -99,6 +99,10 @@ mkdir -p %{buildroot}%{_libdir}/zaloview
 tar -xf %{SOURCE0} -C %{buildroot}%{_libdir}/zaloview --strip-components=1
 chmod 0755 %{buildroot}%{_libdir}/zaloview/zaloview
 chmod 4755 %{buildroot}%{_libdir}/zaloview/chrome-sandbox
+# Copy icon chính của app ra ngoài bundle để cài vào icon theme hicolor
+mkdir -p %{buildroot}%{_datadir}/icons/hicolor/512x512/apps
+cp %{buildroot}%{_libdir}/zaloview/resources/app/dist/assets/app-icon.png \\
+  %{buildroot}%{_datadir}/icons/hicolor/512x512/apps/zaloview.png
 mkdir -p %{buildroot}%{_bindir}
 ln -sf %{_libdir}/zaloview/zaloview %{buildroot}%{_bindir}/zaloview
 mkdir -p %{buildroot}%{_datadir}/applications
@@ -108,15 +112,17 @@ Type=Application
 Name=ZaloWebView
 Comment=Trình quản lý Webview cho nhiều profile
 Exec=%{_bindir}/zaloview --manager
-Icon=applications-internet
+Icon=zaloview
 Terminal=false
 Categories=Network;InstantMessaging;
 DESKTOP_EOF
 chmod 0644 %{buildroot}%{_datadir}/applications/zaloview-manager.desktop
+chmod 0644 %{buildroot}%{_datadir}/icons/hicolor/512x512/apps/zaloview.png
 
 %files
 %{_bindir}/zaloview
 %{_datadir}/applications/zaloview-manager.desktop
+%{_datadir}/icons/hicolor/512x512/apps/zaloview.png
 %{_libdir}/zaloview/*
 `;
 }

@@ -134,6 +134,8 @@ export class TrayManager {
     this.normalImage = profileImage ?? defaultImage;
     if (!this.normalImage) return;
 
+    // Icon 'unread' chỉ là đỏ báo hiệu (không phải ảnh Zalo), giữ nguyên logic hiện có.
+    // Xem spec 004: ảnh Zalo dùng cho tray thường (default-icon.png).
     this.unreadImage = loadImage(this.dependencies.createImage, unreadImagePath) ?? defaultImage;
     this.unreadImage ??= this.normalImage;
 

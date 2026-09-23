@@ -177,11 +177,15 @@ app.on('second-instance', () => {
   }
 });
 
+/** Đường dẫn icon PNG chính của ứng dụng, đóng gói cùng bundle trong dist/assets. */
+const APP_ICON_PATH = path.join(__dirname, '../assets/app-icon.png');
+
 function createManagerWindow(): BrowserWindow {
   const win = new BrowserWindow({    width: 900,
     height: 650,
     title: 'ZaloWebView Manager',
     autoHideMenuBar: true,
+    icon: APP_ICON_PATH,
     webPreferences: {
       contextIsolation: true,
       nodeIntegration: false,
@@ -405,6 +409,7 @@ app.whenReady().then(async () => {
       profile: currentProfile,
       windowState: currentWindowState,
       preloadPath,
+      appIconPath: APP_ICON_PATH,
       permissionManager,
       onWindowStateChange: (newState) => {
         currentWindowState = newState;
@@ -596,6 +601,7 @@ app.whenReady().then(async () => {
           profile: currentProfile,
           windowState: currentWindowState,
           preloadPath,
+          appIconPath: APP_ICON_PATH,
           permissionManager,
           onWindowStateChange: (newState) => {
             currentWindowState = newState;
