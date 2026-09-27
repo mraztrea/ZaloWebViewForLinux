@@ -625,7 +625,9 @@ app.on('will-quit', (event) => {
   const server = runnerServer;
   void server.stop().finally(() => {
     runnerServer = null;
-    app.quit();
+    // app.quit() gọi lại sau khi will-quit đã preventDefault bị Electron bỏ qua
+    // (cửa sổ đã đóng hết) nên tiến trình treo; dọn dẹp đã xong, thoát thẳng.
+    app.exit(0);
   });
 });
 

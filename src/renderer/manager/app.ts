@@ -509,7 +509,11 @@ async function onSaveForm(): Promise<void> {
     if (version !== formVersion) return;
     closeForm();
     const messages = ['Đã lưu.'];
-    if (result.restartRequired === true) messages.push('Runner đang dùng cấu hình cũ — cần mở lại runner.');
+    if (result.restartRequired === true) {
+      messages.push(result.runnerRestarted
+        ? 'Đã mở lại runner để áp dụng cấu hình mới.'
+        : 'Runner đang dùng cấu hình cũ — không tự mở lại được, hãy mở lại runner.');
+    }
     if (result.restartRequired === null) messages.push('Chưa xác định được runner có cần mở lại không.');
     if (result.iconWarning) messages.push(result.iconWarning);
     setStatus(messages.join(' '), 'info');

@@ -391,6 +391,8 @@ describe('ManagerService US3: shortcut từng phần (P5-04)', () => {
     });
     const saved = await service.saveProfile({ name: 'Cu', url: 'https://a.vn' });
     expect(saved.restartRequired).toBe(true);
+    // Không có appPath → không tự mở lại được, UI vẫn nhắc mở lại thủ công.
+    expect(saved.runnerRestarted).toBe(false);
   });
 
   it('toggleShortcut từ chối enabled không phải boolean', async () => {

@@ -387,6 +387,7 @@ export class ManagerService {
       throw new ManagerError('REGISTRY_ERROR', `Không thể lưu profile: ${(err as Error).message}`);
     }
 
+    let result: ManagerSaveResult;
     this.busyProfiles.add(saved.id);
     try {
     let shortcut: ShortcutSyncResult;
@@ -396,11 +397,26 @@ export class ManagerService {
       shortcut = { status: 'error', path: '', message: (err as Error).message };
     }
 
-    return {
+    result = {
       profile: saved, shortcut, restartRequired: await this.checkRestartRequired(saved),
       ...(iconWarning ? { iconWarning } : {})
     };
     } finally { this.busyProfiles.delete(saved.id); }
+
+    // Runner không tự nạp lại cấu hình: mở lại để áp dụng ngay bản vừa lưu.
+    if (result.restartRequired === true) result.runnerRestarted = await this.restartRunner(saved.id);
+    return result;
+  }
+
+  private async restartRunner(profileId: string): Promise<boolean> {
+    try {
+      await this.ensureRunnerStopped(profileId);
+      await this.launchProfile(profileId);
+      return true;
+    } catch (err: unknown) {
+      console.warn(`[ZaloWebView] Không tự mở lại được runner "${profileId}":`, (err as Error).message);
+      return false;
+    }
   }
 
   public async deleteProfile(profileId: string): Promise<DeleteProfileResult> {

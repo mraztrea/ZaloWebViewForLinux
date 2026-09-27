@@ -127,6 +127,8 @@ export interface ManagerSaveResult {
   shortcut: ShortcutSyncResult;
   /** true khi runner đang dùng bản cấu hình cũ; null khi không lấy được revision. */
   restartRequired: boolean | null;
+  /** Có mặt khi restartRequired === true: runner đã được tự mở lại hay chưa. */
+  runnerRestarted?: boolean;
   /** Lý do thay icon đã mất bằng biểu tượng dự phòng, không chặn lưu profile. */
   iconWarning?: string;
 }
