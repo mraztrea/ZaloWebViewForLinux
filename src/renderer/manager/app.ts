@@ -25,6 +25,17 @@ let refreshingStatus = false;
 let disposed = false;
 const DEFAULT_ICON = '../../assets/default-icon.png';
 
+interface RunnerView {
+  runnerState: string;
+  hasAttention: boolean;
+  configOutdated: boolean;
+  text: string;
+  canClear: boolean;
+}
+
+/** Trạng thái runner gần nhất theo profile, dùng lại khi card được dựng lại. */
+const runnerViews = new Map<string, RunnerView>();
+
 function bridge(): Bridge | null {
   return typeof window !== 'undefined' && window.zaloview ? window.zaloview : null;
 }
@@ -140,6 +151,9 @@ function makeCard(profile: Profile): HTMLElement {
 
   actions.append(openBtn, editBtn, clearBtn, sessionBtn, deleteBtn);
   card.append(cardHeader, status, actions);
+  // Lọc/tạo lại danh sách không làm mất trạng thái runner vừa biết.
+  const cachedView = runnerViews.get(profile.id);
+  if (cachedView) applyRunnerView(card, cachedView);
   return card;
 }
 
@@ -224,6 +238,16 @@ function describeRunnerState(stateValue: string): string {
   return 'Trạng thái runner: chưa xác định';
 }
 
+function applyRunnerView(card: HTMLElement, view: RunnerView): void {
+  card.dataset.runnerState = view.runnerState;
+  card.dataset.hasAttention = String(view.hasAttention);
+  card.dataset.configOutdated = String(view.configOutdated);
+  const node = card.querySelector('[data-role="runner-status"]');
+  if (node) node.textContent = view.text;
+  const clearBtn = card.querySelector<HTMLButtonElement>('[data-action="clear-attention"]');
+  if (clearBtn) clearBtn.disabled = !view.canClear;
+}
+
 async function refreshRunnerStates(): Promise<void> {
   clearTimeout(statusTimer);
   const api = bridge();
@@ -242,6 +266,7 @@ async function refreshRunnerStates(): Promise<void> {
         const profile = state.profiles.find((p) => p.id === id);
         const messages = [describeRunnerState(status.state)];
         let runnerState: string = status.state;
+        let configOutdated = false;
         if (data?.status === 'starting') {
           messages[0] = 'Trạng thái runner: đang khởi động';
           runnerState = 'starting';
@@ -253,27 +278,30 @@ async function refreshRunnerStates(): Promise<void> {
         if (status.state === 'running') {
           if (!data?.configRevision) {
             messages.push('Chưa xác định có cần mở lại');
-            card.dataset.configOutdated = 'false';
           } else if (data.configRevision !== profile?.updatedAt) {
             messages.push('Cấu hình cũ — cần mở lại runner');
-            card.dataset.configOutdated = 'true';
-          } else {
-            card.dataset.configOutdated = 'false';
+            configOutdated = true;
           }
           messages.push(data?.attention?.active ? `Có cảnh báo (${data.attention.count})` : 'Không có cảnh báo');
-        } else {
-          card.dataset.configOutdated = 'false';
         }
-        card.dataset.runnerState = runnerState;
-        card.dataset.hasAttention = data?.attention?.active ? 'true' : 'false';
-        node.textContent = messages.join('. ');
-        const clearBtn = card.querySelector<HTMLButtonElement>('[data-action="clear-attention"]');
-        if (clearBtn) clearBtn.disabled = status.state !== 'running' || !data?.attention?.active;
+        const view: RunnerView = {
+          runnerState,
+          hasAttention: !!data?.attention?.active,
+          configOutdated,
+          text: messages.join('. '),
+          canClear: status.state === 'running' && !!data?.attention?.active
+        };
+        runnerViews.set(id, view);
+        applyRunnerView(card, view);
       } catch {
-        card.dataset.runnerState = 'unknown';
-        card.dataset.hasAttention = 'false';
-        card.dataset.configOutdated = 'false';
-        node.textContent = describeRunnerState('unknown');
+        runnerViews.delete(id);
+        applyRunnerView(card, {
+          runnerState: 'unknown',
+          hasAttention: false,
+          configOutdated: false,
+          text: describeRunnerState('unknown'),
+          canClear: false
+        });
       }
     })
   );

@@ -207,6 +207,23 @@ function restoreMainWindow(): void {
   restoreRunnerWindow(mainWindow);
 }
 
+async function confirmMediaPermission(origin: string): Promise<{ granted: boolean; remember: boolean }> {
+  const options: Electron.MessageBoxOptions = {
+    type: 'question',
+    message: `${origin} muốn dùng camera/micro`,
+    detail: 'Cho phép để gọi thoại/video. Từ chối vẫn nhắn tin bình thường.',
+    buttons: ['Cho phép', 'Từ chối'],
+    defaultId: 1,
+    cancelId: 1,
+    checkboxLabel: 'Ghi nhớ lựa chọn cho trang này',
+    checkboxChecked: true
+  };
+  const result = mainWindow && !mainWindow.isDestroyed()
+    ? await dialog.showMessageBox(mainWindow, options)
+    : await dialog.showMessageBox(options);
+  return { granted: result.response === 0, remember: result.checkboxChecked };
+}
+
 function syncAttentionFocus(): void {
   if (!mainWindow || mainWindow.isDestroyed()) return;
   const focused = mainWindow.isFocused() && mainWindow.isVisible() && !mainWindow.isMinimized();
@@ -411,6 +428,7 @@ app.whenReady().then(async () => {
       preloadPath,
       appIconPath: APP_ICON_PATH,
       permissionManager,
+      confirmPermission: confirmMediaPermission,
       onWindowStateChange: (newState) => {
         currentWindowState = newState;
         profileManager.saveWindowState(profileId, newState);
@@ -589,36 +607,6 @@ app.whenReady().then(async () => {
     mainWindow = createManagerWindow();
     setupManagerHandlers();
   }
-
-  app.on('activate', () => {
-    if (BrowserWindow.getAllWindows().length === 0) {
-      if (cliArgs.mode === 'profile' && currentProfile) {
-        currentWindowState = profileManager.loadWindowState(currentProfile.id);
-        const permissionManager = new PermissionManager(currentProfile.id);
-        const preloadPath = path.join(__dirname, '../preload/webview-preload.js');
-
-        mainWindow = createRunnerWindow({
-          profile: currentProfile,
-          windowState: currentWindowState,
-          preloadPath,
-          appIconPath: APP_ICON_PATH,
-          permissionManager,
-          onWindowStateChange: (newState) => {
-            currentWindowState = newState;
-            profileManager.saveWindowState(currentProfile!.id, newState);
-          }
-        });
-        initializeRunnerDesktopIntegration(currentProfile);
-        mainWindow.webContents.on('did-finish-load', () => {
-          if (currentProfile?.xpathConfig) {
-            mainWindow?.webContents.send('xpath:init', { config: currentProfile.xpathConfig });
-          }
-        });
-      } else {
-        mainWindow = createManagerWindow();
-      }
-    }
-  });
 }).catch((err: Error) => {
   console.error('[ZaloWebView] Lỗi khởi động ứng dụng:', err);
   app.exit(1);
@@ -646,7 +634,5 @@ app.on('before-quit', () => {
 });
 
 app.on('window-all-closed', () => {
-  if (process.platform !== 'darwin') {
-    app.quit();
-  }
+  app.quit();
 });
