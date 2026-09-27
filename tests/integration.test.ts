@@ -30,6 +30,7 @@ describe('US5: chuỗi Manager đầu cuối', () => {
       removeShortcut: (async () => ({ status: 'removed' as const, path: '/tmp/x.desktop' })) as never,
       spawnRunner: (args: string[]) => {
         launched.push(args);
+        return DEAD_PID;
       },
       confirmAction: async () => true
     });
@@ -141,10 +142,13 @@ describe('US5: chuỗi Manager đầu cuối', () => {
       profileId: a.profile.id
     });
 
-    // 10. Sửa A → cần mở lại vì revision snapshot cũ
+    // 10. Sửa A → revision snapshot cũ → tự dừng runner rồi mở lại
+    const launchesBeforeEdit = launched.length;
     const edited = await service.saveProfile({ id: a.profile.id, name: 'Profile A2', url: 'https://a.vn' });
     expect(edited.profile.name).toBe('Profile A2');
     expect(edited.restartRequired).toBe(true);
+    expect(edited.runnerRestarted).toBe(true);
+    expect(launched.length).toBe(launchesBeforeEdit + 1);
 
     // 11. Xóa A: shutdown qua socket → server dừng → socket dọn → PID giả đã chết
     const sessionDir = resolveProfileDataDir(a.profile.id);
