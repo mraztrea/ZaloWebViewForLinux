@@ -80,3 +80,51 @@ describe.runIf(hasRpmbuild)('Linux RPM installer', () => {
     300000
   );
 });
+
+const hasDpkgDeb = (() => {
+  try {
+    execFileSync('dpkg-deb', ['--version'], { stdio: 'ignore' });
+    return true;
+  } catch {
+    return false;
+  }
+})();
+
+describe.runIf(hasDpkgDeb)('Linux DEB installer', () => {
+  const rootDir = path.resolve(__dirname, '..');
+  const tempDirs: string[] = [];
+
+  afterEach(() => {
+    for (const dir of tempDirs.splice(0)) {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it(
+    'tạo một file .deb chứa bundle, symlink, sandbox setuid và entry menu',
+    () => {
+      const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'zaloview-deb-'));
+      tempDirs.push(tempDir);
+      const outputFile = path.join(tempDir, 'zaloview.deb');
+
+      execFileSync(process.execPath, [path.join(rootDir, 'scripts/package-deb.mjs'), '--output', outputFile], {
+        cwd: rootDir,
+        stdio: 'pipe',
+        timeout: 300000
+      });
+
+      const files = execFileSync('dpkg-deb', ['-c', outputFile], { encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 });
+      expect(files).toMatch(/\.\/usr\/bin\/zaloview -> \/usr\/lib\/zaloview\/zaloview/);
+      expect(files).toMatch(/-rwsr-xr-x root\/root\s+\d+.*\/usr\/lib\/zaloview\/chrome-sandbox/);
+      expect(files).toContain('zaloview-manager.desktop');
+      expect(files).toContain('hicolor/512x512/apps/zaloview.png');
+      expect(files).not.toContain('node_modules');
+
+      const version = (JSON.parse(fs.readFileSync(path.join(rootDir, 'package.json'), 'utf8')) as { version: string }).version;
+      const info = execFileSync('dpkg-deb', ['-f', outputFile, 'Package', 'Version'], { encoding: 'utf8' });
+      expect(info).toContain('Package: zaloview');
+      expect(info).toContain(`Version: ${version}-1`);
+    },
+    300000
+  );
+});

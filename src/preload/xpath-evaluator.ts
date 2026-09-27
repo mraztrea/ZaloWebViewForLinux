@@ -13,6 +13,7 @@ import {
 } from '../shared/types';
 
 export const HIGHLIGHT_OVERLAY_CLASS = '__zaloview_highlight_overlay__';
+const DEBOUNCE_MAX_WAIT_MS = 1000;
 
 export interface ParseBadgeCountResult {
   count: number;
@@ -333,6 +334,7 @@ export class XPathObserverRuntime {
   private config: XPathConfig | null = null;
   private observer: MutationObserver | null = null;
   private debounceTimer: NodeJS.Timeout | null = null;
+  private maxWaitTimer: NodeJS.Timeout | null = null;
   private pollIntervalTimer: NodeJS.Timeout | null = null;
   private baseline: XPathBaselineRecord = {
     hasElement: false,
@@ -429,10 +431,21 @@ export class XPathObserverRuntime {
     if (this.debounceTimer) {
       clearTimeout(this.debounceTimer);
     }
-    this.debounceTimer = setTimeout(() => {
-      this.debounceTimer = null;
-      this.evaluateAndDispatch();
-    }, delayMs);
+    this.debounceTimer = setTimeout(() => this.flushDebouncedEvaluation(), delayMs);
+    // DOM đổi liên tục (Zalo) sẽ reset debounce mãi; maxWait bảo đảm vẫn đánh giá định kỳ.
+    this.maxWaitTimer ??= setTimeout(() => this.flushDebouncedEvaluation(), DEBOUNCE_MAX_WAIT_MS);
+  }
+
+  private flushDebouncedEvaluation(): void {
+    this.clearDebounceTimers();
+    this.evaluateAndDispatch();
+  }
+
+  private clearDebounceTimers(): void {
+    if (this.debounceTimer) clearTimeout(this.debounceTimer);
+    if (this.maxWaitTimer) clearTimeout(this.maxWaitTimer);
+    this.debounceTimer = null;
+    this.maxWaitTimer = null;
   }
 
   /**
@@ -515,10 +528,7 @@ export class XPathObserverRuntime {
       this.observer = null;
     }
 
-    if (this.debounceTimer) {
-      clearTimeout(this.debounceTimer);
-      this.debounceTimer = null;
-    }
+    this.clearDebounceTimers();
 
     if (this.pollIntervalTimer) {
       clearInterval(this.pollIntervalTimer);

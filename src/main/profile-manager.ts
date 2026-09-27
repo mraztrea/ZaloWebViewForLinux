@@ -60,8 +60,6 @@ export interface UpdateProfileParams {
 }
 
 export class ProfileManager {
-  private registryCache: ProfileRegistry | null = null;
-
   /**
    * Loads and validates the profiles registry from profiles.json.
    * If the file does not exist, returns an empty registry without creating the file.
@@ -71,8 +69,7 @@ export class ProfileManager {
     const registryPath = resolveRegistryPath();
 
     if (!fs.existsSync(registryPath)) {
-      this.registryCache = { schemaVersion: 1, profiles: [] };
-      return this.registryCache;
+      return { schemaVersion: 1, profiles: [] };
     }
 
     let rawContent: string;
@@ -116,12 +113,10 @@ export class ProfileManager {
       validatedProfiles.push(profile);
     }
 
-    this.registryCache = {
+    return {
       schemaVersion: 1,
       profiles: validatedProfiles
     };
-
-    return this.registryCache;
   }
 
   /**
@@ -248,6 +243,5 @@ export class ProfileManager {
     const registryPath = resolveRegistryPath();
     const content = JSON.stringify(registry, null, 2);
     atomicWriteFile(registryPath, content);
-    this.registryCache = registry;
   }
 }

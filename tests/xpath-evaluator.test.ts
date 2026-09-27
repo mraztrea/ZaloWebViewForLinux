@@ -582,6 +582,37 @@ describe('XPathObserverRuntime', () => {
     runtime.cleanup();
   });
 
+  it('vẫn đánh giá sau tối đa 1000 ms khi DOM đổi liên tục (maxWait)', () => {
+    let currentText = '1';
+    const doc = {
+      documentElement: {},
+      body: { appendChild: vi.fn() },
+      evaluate: () => ({
+        resultType: XPathResultMock.FIRST_ORDERED_NODE_TYPE,
+        singleNodeValue: { textContent: currentText, nodeType: 1 }
+      })
+    } as unknown as Document;
+    const sent: unknown[] = [];
+    const runtime = new XPathObserverRuntime(doc, { send: (_c, payload) => sent.push(payload) });
+    runtime.init({ selector: '//badge', mode: 'badge_count', pollIntervalMs: 60000 });
+    expect(sent.length).toBe(1);
+
+    // Mutation mỗi 100 ms: debounce 300 ms bị reset mãi, chỉ maxWait mới bắn.
+    for (let i = 2; i <= 10; i++) {
+      currentText = String(i);
+      runtime.scheduleDebouncedEvaluation(300);
+      vi.advanceTimersByTime(100);
+    }
+    expect(sent.length).toBe(1);
+    currentText = '11';
+    runtime.scheduleDebouncedEvaluation(300);
+    vi.advanceTimersByTime(100);
+    expect(sent.length).toBe(2);
+    expect((sent[1] as { count: number }).count).toBe(11);
+
+    runtime.cleanup();
+  });
+
   it('testXPath does not alter active baseline', () => {
     const doc = createMockDocumentWithNode('10');
     const sentEvents: Array<{ channel: string; payload: unknown }> = [];

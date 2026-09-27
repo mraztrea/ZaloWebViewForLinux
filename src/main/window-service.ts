@@ -1,4 +1,5 @@
 import { BrowserWindow, BrowserWindowConstructorOptions, screen, shell } from 'electron';
+import type { WebContents } from 'electron';
 import { Profile, WindowState } from '../shared/types';
 import { clampWindowBounds } from './screen-utils';
 import { PermissionManager } from './permission-manager';
@@ -37,7 +38,76 @@ export interface CreateRunnerWindowOptions {
   /** Đường dẫn icon PNG của ứng dụng; tùy chọn vì dev environment có thể thiếu. */
   appIconPath?: string;
   permissionManager?: PermissionManager;
+  /** Hỏi người dùng khi origin xin camera/micro lần đầu; thiếu thì mặc định từ chối. */
+  confirmPermission?: PermissionPrompt;
   onWindowStateChange?: (newState: WindowState) => void;
+}
+
+export type PermissionPrompt = (
+  origin: string,
+  permission: string
+) => Promise<{ granted: boolean; remember: boolean }>;
+
+/**
+ * Quyết định một yêu cầu quyền từ trang web. Camera/micro chưa có quyết định
+ * lưu sẵn thì hỏi người dùng; chỉ lưu khi người dùng chọn ghi nhớ.
+ */
+export async function requestProfilePermission(
+  profile: Profile,
+  permission: string,
+  origin: string,
+  permissionManager: PermissionManager,
+  confirm?: PermissionPrompt
+): Promise<boolean> {
+  if (
+    permission !== 'media'
+    || !confirm
+    || !origin
+    || permissionManager.getPermission(origin, permission) !== undefined
+  ) {
+    return shouldAllowProfilePermission(profile, permission, origin, permissionManager);
+  }
+  const { granted, remember } = await confirm(origin, permission);
+  if (remember) permissionManager.setPermission(origin, permission, granted);
+  return granted;
+}
+
+const EXTERNAL_PROTOCOLS = new Set(['http:', 'https:', 'mailto:']);
+
+/** Chỉ chuyển cho trình duyệt hệ thống các URL web/mailto; chặn file:, smb:, scheme lạ. */
+export function openExternalSafe(targetUrl: string): void {
+  let parsed: URL;
+  try {
+    parsed = new URL(targetUrl);
+  } catch {
+    return;
+  }
+  if (!EXTERNAL_PROTOCOLS.has(parsed.protocol)) {
+    console.warn(`[ZaloWebView] Chặn mở liên kết ngoài với giao thức ${parsed.protocol}`);
+    return;
+  }
+  shell.openExternal(parsed.href).catch((err: Error) => {
+    console.error('[ZaloWebView] Không thể mở URL ngoại vi:', err);
+  });
+}
+
+type GuardedContents = Pick<WebContents, 'on' | 'setWindowOpenHandler'>;
+
+/** Giữ điều hướng trong origin profile/đăng nhập Zalo; các liên kết khác mở ngoài. */
+export function attachNavigationGuard(contents: GuardedContents, profileUrl: string): void {
+  contents.on('will-navigate', (event, targetUrl) => {
+    if (isAllowedProfileNavigation(profileUrl, targetUrl)) return;
+    event.preventDefault();
+    openExternalSafe(targetUrl);
+  });
+
+  contents.setWindowOpenHandler((details) => {
+    if (isAllowedProfileNavigation(profileUrl, details.url)) {
+      return { action: 'allow' };
+    }
+    openExternalSafe(details.url);
+    return { action: 'deny' };
+  });
 }
 
 export function shouldAllowProfilePermission(
@@ -111,7 +181,15 @@ export function buildRunnerWindowOptions(
 }
 
 export function createRunnerWindow(options: CreateRunnerWindowOptions): BrowserWindow {
-  const { profile, windowState, preloadPath, appIconPath, permissionManager, onWindowStateChange } = options;
+  const {
+    profile,
+    windowState,
+    preloadPath,
+    appIconPath,
+    permissionManager,
+    confirmPermission,
+    onWindowStateChange
+  } = options;
   let currentNormalBounds = {
     x: windowState.x,
     y: windowState.y,
@@ -142,9 +220,10 @@ export function createRunnerWindow(options: CreateRunnerWindowOptions): BrowserW
   );
 
   const win = new BrowserWindow(winOptions);
-  win.webContents.setUserAgent(
-    profile.userAgent || getChromeCompatibleUserAgent(win.webContents.getUserAgent())
-  );
+  const userAgent = profile.userAgent || getChromeCompatibleUserAgent(win.webContents.getUserAgent());
+  // Đặt cho cả session để popup đăng nhập cũng dùng UA tương thích Chrome.
+  win.webContents.session.setUserAgent(userAgent);
+  win.webContents.setUserAgent(userAgent);
 
   if (windowState.isMaximized) {
     win.maximize();
@@ -190,6 +269,8 @@ export function createRunnerWindow(options: CreateRunnerWindowOptions): BrowserW
       return shouldAllowProfilePermission(profile, permission, requestingOrigin, permissionManager);
     });
 
+    // Gộp các yêu cầu đồng thời cùng origin/quyền vào một hộp thoại.
+    const pendingPrompts = new Map<string, Promise<boolean>>();
     ses.setPermissionRequestHandler((_webContents, permission, callback, details) => {
       let origin = '';
       try {
@@ -198,42 +279,27 @@ export function createRunnerWindow(options: CreateRunnerWindowOptions): BrowserW
         callback(false);
         return;
       }
-      if (permission === 'media' || permission === 'notifications') {
-        const granted = shouldAllowProfilePermission(profile, permission, origin, permissionManager);
-        callback(granted);
+      if (permission !== 'media' && permission !== 'notifications') {
+        // Default deny for unhandled permissions
+        callback(false);
         return;
       }
-      // Default deny for unhandled permissions
-      callback(false);
+      const key = `${origin}|${permission}`;
+      let pending = pendingPrompts.get(key);
+      if (!pending) {
+        pending = requestProfilePermission(profile, permission, origin, permissionManager, confirmPermission)
+          .catch(() => false)
+          .finally(() => pendingPrompts.delete(key));
+        pendingPrompts.set(key, pending);
+      }
+      void pending.then(callback);
     });
   }
 
-  win.webContents.on('will-navigate', (event, targetUrl) => {
-    if (isAllowedProfileNavigation(profile.url, targetUrl)) {
-      return;
-    }
-
-    try {
-      new URL(targetUrl);
-      event.preventDefault();
-      shell.openExternal(targetUrl).catch((err: Error) => {
-        console.error('[ZaloWebView] Không thể mở URL ngoại vi:', err);
-      });
-    } catch {
-      event.preventDefault();
-    }
-  });
-
-  // Keep profile and Zalo auth popups in Electron; open other links externally.
-  win.webContents.setWindowOpenHandler((details) => {
-    if (isAllowedProfileNavigation(profile.url, details.url)) {
-      return { action: 'allow' };
-    }
-
-    shell.openExternal(details.url).catch((err: Error) => {
-      console.error('[ZaloWebView] Lỗi mở liên kết ngoài:', err);
-    });
-    return { action: 'deny' };
+  attachNavigationGuard(win.webContents, profile.url);
+  // Popup đăng nhập được phép mở trong Electron cũng phải chịu cùng guard.
+  win.webContents.on('did-create-window', (child) => {
+    attachNavigationGuard(child.webContents, profile.url);
   });
 
   win.once('ready-to-show', () => {

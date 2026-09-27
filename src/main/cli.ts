@@ -1,5 +1,8 @@
 import { CommandLineArgs, PROFILE_ID_REGEX, MAX_PROFILE_ID_LENGTH } from '../shared/types';
 
+/** Switch Chromium dạng --key=value; trừ tùy chọn của chính zaloview. */
+const CHROMIUM_SWITCH_REGEX = /^--(?!(?:profile|manager|help|version)=)[a-z0-9][a-z0-9-]*=/;
+
 export class CommandLineError extends Error {
   public readonly exitCode: number;
 
@@ -68,6 +71,9 @@ export function parseCommandLineArgs(argv: string[], isPackaged = false): Comman
       mode = 'profile';
       profileId = nextArg;
       i++; // Skip the next argument as it is the profile id
+    } else if (CHROMIUM_SWITCH_REGEX.test(arg)) {
+      // Switch Chromium/Electron (vd: --ozone-platform=wayland) do Chromium tự xử lý.
+      continue;
     } else {
       throw new CommandLineError(`Tùy chọn không xác định: "${arg}". Dùng --help để xem danh sách tùy chọn.`, 1);
     }

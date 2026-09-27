@@ -21,7 +21,7 @@ import { validateProfileId, validateProfileName, validateProfileUrl, validateXPa
 import { resolveDataDir, resolveProfileDataDir, resolveSocketPath } from './xdg-paths';
 import { atomicWriteFile } from './atomic-writer';
 import { buildExportBundle, parseImportBundle, MAX_IMPORT_FILE_BYTES, type ParseImportResult } from './profile-transfer';
-import { sendSocketCommand } from './runner-control';
+import { sendSocketCommand, XPATH_TEST_TIMEOUT_MS } from './runner-control';
 import { removeProfileShortcut, syncProfileShortcut } from './desktop-service';
 import {
   fetchIconBuffer,
@@ -44,7 +44,7 @@ import type {
   XPathEvaluationStatus,
   XPathObservationMode
 } from '../shared/types';
-import { MAX_XPATH_SELECTOR_LENGTH, SOCKET_TIMEOUT_MS } from '../shared/types';
+import { MAX_XPATH_SELECTOR_LENGTH } from '../shared/types';
 import type { SaveProfileInput } from '../preload/manager-preload';
 
 export const MANAGER_CHANNELS = {
@@ -225,10 +225,6 @@ function asOptionalString(value: unknown): string | undefined {
   return trimmed ? trimmed : undefined;
 }
 
-function notImplemented(method: string): never {
-  throw new ManagerError('NOT_IMPLEMENTED', `Phương thức ${method} chưa được triển khai.`);
-}
-
 /** Tên tệp xuất dạng zaloview-profiles-YYYYMMDD.json. */
 function formatDateStamp(date: Date): string {
   const year = date.getFullYear();
@@ -374,6 +370,7 @@ export class ManagerService {
           updates.desktopConfig = raw.desktopConfig as Profile['desktopConfig'];
         }
         saved = this.deps.profileManager.updateProfile(id, updates);
+        if (existing.iconPath !== saved.iconPath) this.pruneIcon(existing.iconPath);
       }
     } catch (err: unknown) {
       if (err instanceof ManagerError) throw err;
@@ -452,7 +449,7 @@ export class ManagerService {
         `Shortcut đã gỡ nhưng không xóa được registry: ${(err as Error).message}. Profile còn trong danh sách, hãy đồng bộ lại shortcut.`
       );
     }
-    void profile;
+    this.pruneIcon(profile.iconPath);
     return { removed: true, sessionKept: true };
     } finally { this.busyProfiles.delete(id); }
   }
@@ -576,8 +573,8 @@ export class ManagerService {
     return { cancelled: false, count: profiles.length, path: target };
   }
 
-  /** Đọc icon trong vùng icon của ứng dụng; mọi lỗi/đường dẫn ngoài vùng đều trả null. */
-  private readIconBuffer(iconPath: string): Buffer | null {
+  /** Đường dẫn icon nếu nằm thật trong vùng icon của ứng dụng; ngoài vùng/lỗi trả null. */
+  private resolveManagedIcon(iconPath: string): string | null {
     try {
       const iconRoot = fs.realpathSync(this.deps.iconDir);
       const resolved = path.resolve(iconPath);
@@ -585,10 +582,38 @@ export class ManagerService {
       if (!relative || relative.startsWith('..') || path.isAbsolute(relative)) return null;
       const realRelative = path.relative(iconRoot, fs.realpathSync(resolved));
       if (!realRelative || realRelative.startsWith('..') || path.isAbsolute(realRelative)) return null;
+      return resolved;
+    } catch {
+      return null;
+    }
+  }
+
+  /** Đọc icon trong vùng icon của ứng dụng; mọi lỗi/đường dẫn ngoài vùng đều trả null. */
+  private readIconBuffer(iconPath: string): Buffer | null {
+    const resolved = this.resolveManagedIcon(iconPath);
+    if (!resolved) return null;
+    try {
       const buffer = fs.readFileSync(resolved);
       return buffer.length > 0 ? buffer : null;
     } catch {
       return null;
+    }
+  }
+
+  /**
+   * Xóa icon cũ khi không còn profile nào dùng. Icon đặt tên theo hash nên
+   * nhiều profile có thể dùng chung một tệp. Best effort: lỗi không chặn thao tác.
+   */
+  private pruneIcon(iconPath: string | undefined): void {
+    if (!iconPath || iconPath === this.deps.fallbackIconPath) return;
+    const resolved = this.resolveManagedIcon(iconPath);
+    if (!resolved) return;
+    try {
+      const inUse = this.deps.profileManager.loadRegistry().profiles
+        .some((p) => p.iconPath && path.resolve(p.iconPath) === resolved);
+      if (!inUse) fs.unlinkSync(resolved);
+    } catch {
+      // ignore: icon mồ côi chỉ tốn dung lượng
     }
   }
 
@@ -820,7 +845,7 @@ export class ManagerService {
         socketPath,
         'test-xpath',
         { selector: trimmed, mode },
-        SOCKET_TIMEOUT_MS
+        XPATH_TEST_TIMEOUT_MS + 1000
       );
     } catch (err: unknown) {
       throw new ManagerError(
@@ -1048,11 +1073,8 @@ function defaultFallbackIconPath(): string {
   return path.join(__dirname, '..', 'assets', 'default-icon.png');
 }
 
-/** Giữ tham chiếu kiểu để import type không bị coi là thừa. */
-export type { FetchedIcon, RunnerStatusData };
-
 /**
- * Đăng ký 11 kênh Manager lên ipcMain. Mỗi listener kiểm tra sender trước
+ * Đăng ký các kênh MANAGER_CHANNELS lên ipcMain. Mỗi listener kiểm tra sender trước
  * khi gọi service; payload chi tiết do từng method của service validate.
  */
 export function registerManagerHandlers(

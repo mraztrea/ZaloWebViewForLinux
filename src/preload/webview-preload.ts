@@ -2,13 +2,9 @@
  * Webview Preload Script (Isolated Sandbox)
  * contextIsolation: true, nodeIntegration: false, sandbox: true
  */
-import { contextBridge, ipcRenderer } from 'electron';
+import { ipcRenderer } from 'electron';
 import { XPathObserverRuntime } from './xpath-evaluator';
 import { XPathConfig, XPathObservationMode } from '../shared/types';
-
-contextBridge.exposeInMainWorld('__zaloview_bridge__', {
-  version: '0.1.0'
-});
 
 const runtime = new XPathObserverRuntime(document, {
   send: (channel: string, payload: unknown) => {
@@ -63,13 +59,10 @@ document.addEventListener('visibilitychange', () => {
   }
 });
 
-// 4. Cleanup on document unload or page navigation
+// 4. Cleanup on page navigation. Không dùng beforeunload: trang có thể hủy
+// unload, khi đó observer sẽ dừng vĩnh viễn mà không được init lại.
 window.addEventListener('pagehide', () => {
   runtime.cleanup();
 });
 
-window.addEventListener('beforeunload', () => {
-  runtime.cleanup();
-});
-
-console.log('[ZaloWebView Preload] Sandbox bridge and XPath Observer loaded');
+console.log('[ZaloWebView Preload] XPath Observer loaded');

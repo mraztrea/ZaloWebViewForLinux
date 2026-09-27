@@ -14,6 +14,9 @@ import {
 } from '../shared/types';
 import { resolveSocketPath } from './xdg-paths';
 
+/** Runner tự hết hạn test XPath; client phải chờ lâu hơn để nhận lỗi TIMEOUT rõ ràng. */
+export const XPATH_TEST_TIMEOUT_MS = 5000;
+
 export interface RunnerControlServerOptions {
   onStatus: () => RunnerStatusData | Promise<RunnerStatusData>;
   onShutdown: () => void | Promise<void>;
@@ -64,6 +67,9 @@ export class RunnerControlServer {
     return new Promise((resolve, reject) => {
       this.server = net.createServer((socket) => {
         let buffer = '';
+        // Client (Manager) có thể đóng kết nối trước khi runner trả lời;
+        // lỗi EPIPE/ECONNRESET không được làm sập tiến trình main.
+        socket.on('error', () => undefined);
 
         socket.on('data', async (chunk) => {
           buffer += chunk.toString('utf-8');
@@ -227,7 +233,7 @@ export class RunnerControlServer {
             }
 
             this.isTestXPathPending = true;
-            const timeoutMs = 5000;
+            const timeoutMs = XPATH_TEST_TIMEOUT_MS;
             let finished = false;
             let timer: ReturnType<typeof setTimeout> | null = null;
             const abortController = new AbortController();
@@ -255,7 +261,7 @@ export class RunnerControlServer {
                 const response: RunnerControlResponse = {
                   requestId,
                   success: false,
-                  error: 'TIMEOUT: Quá thời gian chờ phản hồi kết quả XPath từ trang web (5000 ms).'
+                  error: `TIMEOUT: Quá thời gian chờ phản hồi kết quả XPath từ trang web (${XPATH_TEST_TIMEOUT_MS} ms).`
                 };
                 socket.write(JSON.stringify(response) + '\n');
               }

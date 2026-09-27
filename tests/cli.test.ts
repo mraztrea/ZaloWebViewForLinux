@@ -47,6 +47,14 @@ describe('User Story 2: Command Line Parser', () => {
 
   it('should reject unknown flags', () => {
     expect(() => parseCommandLineArgs(['--unknown-flag'])).toThrow(CommandLineError);
+    // Tùy chọn của app dạng --x=y không được lẫn thành switch Chromium.
+    expect(() => parseCommandLineArgs(['--profile=zalo'])).toThrow(CommandLineError);
+  });
+
+  it('bỏ qua switch Chromium dạng --key=value', () => {
+    const args = parseCommandLineArgs(['--ozone-platform=wayland', '-p', 'zalo']);
+    expect(args.mode).toBe('profile');
+    expect(args.profileId).toBe('zalo');
   });
 
   it('should handle --help and -h', () => {
