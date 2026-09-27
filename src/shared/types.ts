@@ -112,6 +112,7 @@ export interface DesktopIntegrationConfig {
   minimizeToTray: boolean;
   showDesktopNotification: boolean;
   createDesktopShortcut: boolean;
+  enableContextMenu: boolean;
 }
 
 export type ShortcutSyncResult =

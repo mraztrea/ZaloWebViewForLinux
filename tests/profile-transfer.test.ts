@@ -100,7 +100,8 @@ describe('profile-transfer US2: parseImportBundle', () => {
       showTaskbarBadge: true,
       minimizeToTray: false,
       showDesktopNotification: true,
-      createDesktopShortcut: true
+      createDesktopShortcut: true,
+      enableContextMenu: false
     });
     expect(first.iconBase64).toBe('AAECAw==');
     expect(first as unknown as Record<string, unknown>).not.toHaveProperty('createdAt');

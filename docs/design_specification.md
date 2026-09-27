@@ -82,6 +82,7 @@ interface DesktopIntegrationConfig {
   minimizeToTray: boolean;
   showDesktopNotification: boolean;
   createDesktopShortcut: boolean;
+  enableContextMenu: boolean; // menu chuột phải trong cửa sổ profile, mặc định false
 }
 
 interface Profile {

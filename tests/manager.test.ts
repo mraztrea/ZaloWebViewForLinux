@@ -161,7 +161,8 @@ describe('ManagerService US1: getProfiles/saveProfile', () => {
         showTaskbarBadge: true,
         minimizeToTray: true,
         showDesktopNotification: true,
-        createDesktopShortcut: false
+        createDesktopShortcut: false,
+        enableContextMenu: true
       }
     });
     const updated = await service.saveProfile({
@@ -174,7 +175,8 @@ describe('ManagerService US1: getProfiles/saveProfile', () => {
         showTaskbarBadge: false,
         minimizeToTray: false,
         showDesktopNotification: false,
-        createDesktopShortcut: false
+        createDesktopShortcut: false,
+        enableContextMenu: false
       }
     });
     expect(updated.profile.id).toBe(created.profile.id);
@@ -185,7 +187,8 @@ describe('ManagerService US1: getProfiles/saveProfile', () => {
       showTaskbarBadge: false,
       minimizeToTray: false,
       showDesktopNotification: false,
-      createDesktopShortcut: false
+      createDesktopShortcut: false,
+      enableContextMenu: false
     });
   });
 

@@ -7,7 +7,8 @@ const desktopConfig: DesktopIntegrationConfig = {
   showTaskbarBadge: true,
   minimizeToTray: false,
   showDesktopNotification: true,
-  createDesktopShortcut: true
+  createDesktopShortcut: true,
+  enableContextMenu: false
 };
 
 function observation(overrides: Partial<XPathObservationState> = {}): XPathObservationState {

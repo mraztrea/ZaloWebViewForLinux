@@ -145,7 +145,8 @@ export function validateDesktopConfig(config: unknown): DesktopIntegrationConfig
       showTaskbarBadge: true,
       minimizeToTray: false,
       showDesktopNotification: true,
-      createDesktopShortcut: true
+      createDesktopShortcut: true,
+      enableContextMenu: false
     };
   }
 
@@ -164,7 +165,8 @@ export function validateDesktopConfig(config: unknown): DesktopIntegrationConfig
     showTaskbarBadge: ensureBool(raw.showTaskbarBadge, 'showTaskbarBadge', true),
     minimizeToTray: ensureBool(raw.minimizeToTray, 'minimizeToTray', false),
     showDesktopNotification: ensureBool(raw.showDesktopNotification, 'showDesktopNotification', true),
-    createDesktopShortcut: ensureBool(raw.createDesktopShortcut, 'createDesktopShortcut', true)
+    createDesktopShortcut: ensureBool(raw.createDesktopShortcut, 'createDesktopShortcut', true),
+    enableContextMenu: ensureBool(raw.enableContextMenu, 'enableContextMenu', false)
   };
 }
 

@@ -51,7 +51,8 @@ export function createSampleProfile(overrides: Partial<Profile> = {}): Profile {
       showTaskbarBadge: true,
       minimizeToTray: false,
       showDesktopNotification: true,
-      createDesktopShortcut: true
+      createDesktopShortcut: true,
+      enableContextMenu: false
     },
     createdAt: '2026-09-12T10:00:00.000Z',
     updatedAt: '2026-09-12T10:00:00.000Z',
