@@ -1,5 +1,5 @@
-import { BrowserWindow, BrowserWindowConstructorOptions, screen, shell } from 'electron';
-import type { WebContents } from 'electron';
+import { BrowserWindow, BrowserWindowConstructorOptions, clipboard, Menu, screen, shell } from 'electron';
+import type { ContextMenuParams, MenuItemConstructorOptions, WebContents } from 'electron';
 import { Profile, WindowState } from '../shared/types';
 import { clampWindowBounds } from './screen-utils';
 import { PermissionManager } from './permission-manager';
@@ -180,6 +180,35 @@ export function buildRunnerWindowOptions(
   };
 }
 
+export type ContextMenuInput = Pick<
+  ContextMenuParams,
+  'isEditable' | 'editFlags' | 'selectionText' | 'linkURL' | 'mediaType' | 'hasImageContents' | 'x' | 'y'
+>;
+
+export function buildContextMenuTemplate(
+  params: ContextMenuInput,
+  contents: Pick<WebContents, 'copyImageAt'>
+): MenuItemConstructorOptions[] {
+  const items: MenuItemConstructorOptions[] = [];
+  if (params.isEditable) {
+    items.push(
+      { label: 'Cắt', role: 'cut', enabled: params.editFlags.canCut },
+      { label: 'Sao chép', role: 'copy', enabled: params.editFlags.canCopy },
+      { label: 'Dán', role: 'paste', enabled: params.editFlags.canPaste },
+      { label: 'Chọn tất cả', role: 'selectAll', enabled: params.editFlags.canSelectAll }
+    );
+  } else if (params.selectionText.trim()) {
+    items.push({ label: 'Sao chép', role: 'copy' });
+  }
+  if (params.linkURL) {
+    items.push({ label: 'Sao chép liên kết', click: () => clipboard.writeText(params.linkURL) });
+  }
+  if (params.mediaType === 'image' && params.hasImageContents) {
+    items.push({ label: 'Sao chép ảnh', click: () => contents.copyImageAt(params.x, params.y) });
+  }
+  return items;
+}
+
 export function createRunnerWindow(options: CreateRunnerWindowOptions): BrowserWindow {
   const {
     profile,
@@ -301,6 +330,13 @@ export function createRunnerWindow(options: CreateRunnerWindowOptions): BrowserW
   win.webContents.on('did-create-window', (child) => {
     attachNavigationGuard(child.webContents, profile.url);
   });
+
+  if (profile.desktopConfig.enableContextMenu) {
+    win.webContents.on('context-menu', (_event, params) => {
+      const template = buildContextMenuTemplate(params, win.webContents);
+      if (template.length > 0) Menu.buildFromTemplate(template).popup({ window: win });
+    });
+  }
 
   win.once('ready-to-show', () => {
     win.show();

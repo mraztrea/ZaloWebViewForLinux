@@ -339,7 +339,8 @@ function readForm(): FormValues {
       showTaskbarBadge: el<HTMLInputElement>('check-badge').checked,
       minimizeToTray: el<HTMLInputElement>('check-tray').checked,
       showDesktopNotification: el<HTMLInputElement>('check-notify').checked,
-      createDesktopShortcut: el<HTMLInputElement>('check-shortcut').checked
+      createDesktopShortcut: el<HTMLInputElement>('check-shortcut').checked,
+      enableContextMenu: el<HTMLInputElement>('check-contextmenu').checked
     }
   };
 }
@@ -361,6 +362,7 @@ function fillForm(profile: Profile | null): void {
   el<HTMLInputElement>('check-tray').checked = desktop?.minimizeToTray ?? false;
   el<HTMLInputElement>('check-notify').checked = desktop?.showDesktopNotification ?? true;
   el<HTMLInputElement>('check-shortcut').checked = desktop?.createDesktopShortcut ?? true;
+  el<HTMLInputElement>('check-contextmenu').checked = desktop?.enableContextMenu ?? false;
   el('dialog-title').textContent = profile ? `Sửa Profile: ${profile.name}` : 'Thêm Profile';
   hideFormError();
   hideXPathResult();

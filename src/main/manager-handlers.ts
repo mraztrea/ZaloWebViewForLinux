@@ -182,7 +182,7 @@ function validateSaveInput(value: unknown): asserts value is SaveProfileInput {
   }
   if (value.desktopConfig !== undefined) {
     assertRecord(value.desktopConfig, 'desktopConfig');
-    assertAllowedFields(value.desktopConfig, ['flashTaskbar', 'showTaskbarBadge', 'minimizeToTray', 'showDesktopNotification', 'createDesktopShortcut']);
+    assertAllowedFields(value.desktopConfig, ['flashTaskbar', 'showTaskbarBadge', 'minimizeToTray', 'showDesktopNotification', 'createDesktopShortcut', 'enableContextMenu']);
   }
   try {
     validateProfileName(value.name);
