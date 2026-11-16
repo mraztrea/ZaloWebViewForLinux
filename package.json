@@ -14,6 +14,7 @@
     "package:linux": "node scripts/package-linux.mjs",
     "package:rpm": "node scripts/package-rpm.mjs",
     "package:deb": "node scripts/package-deb.mjs",
+    "package:arch": "node scripts/package-arch.mjs",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "prestart": "npm run build",
